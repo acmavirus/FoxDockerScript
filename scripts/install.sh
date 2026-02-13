@@ -21,10 +21,41 @@ if ! command -v docker &> /dev/null; then
     systemctl enable --now docker
 fi
 
-if ! command -v docker compose &> /dev/null; then
+# Hàm tìm lệnh Docker Compose hợp lệ
+find_compose_cmd() {
+    if docker compose version &> /dev/null; then
+        echo "docker compose"
+    elif command -v docker-compose &> /dev/null; then
+        echo "docker-compose"
+    else
+        return 1
+    fi
+}
+
+# Tìm hoặc cài đặt Docker Compose
+COMPOSE_CMD=$(find_compose_cmd)
+
+if [ -z "$COMPOSE_CMD" ]; then
     echo "Đang cài đặt Docker Compose..."
-    apt-get update && apt-get install -y docker-compose-plugin
+    # Thử cài qua apt trước (cho Debian/Ubuntu)
+    if command -v apt-get &> /dev/null; then
+        apt-get update && apt-get install -y docker-compose-plugin
+    fi
+    
+    COMPOSE_CMD=$(find_compose_cmd)
+    
+    # Nếu vẫn chưa có, tải binary trực tiếp (Fallback cho CentOS/Legacy)
+    if [ -z "$COMPOSE_CMD" ]; then
+        echo "Cài đặt plugin thất bại, chuyển sang tải binary..."
+        curl -SL https://github.com/docker/compose/releases/download/v2.24.6/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
+        chmod +x /usr/local/bin/docker-compose
+        COMPOSE_CMD="docker-compose"
+    fi
 fi
+
+echo -e "Sử dụng lệnh Compose: ${GREEN}$COMPOSE_CMD${NC}"
+
+# ... (Giữ nguyên logic kiểm tra cổng)
 
 # 3. Kiểm tra cổng khả dụng (Mặc định 8888)
 PANEL_PORT=8888
@@ -101,7 +132,7 @@ EOF
 
 # 6. Khởi chạy Panel
 echo "Đang tải và khởi chạy FoxDocker Panel từ GitHub Packages..."
-cd /opt/foxdocker && docker compose pull && docker compose up -d
+cd /opt/foxdocker && $COMPOSE_CMD pull && $COMPOSE_CMD up -d
 
 echo -e "${GREEN}========== CÀI ĐẶT HOÀN TẤT ==========${NC}"
 echo -e "Truy cập Panel tại: ${GREEN}http://IP_CUA_BAN:$PANEL_PORT${NC}"
