@@ -1,6 +1,4 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
+# --- Go ---
 # Binaries for programs and plugins
 *.exe
 *.exe~
@@ -17,16 +15,34 @@ coverage.*
 *.coverprofile
 profile.cov
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# Output
+fox-admin
 
-# Go workspace file
-go.work
-go.work.sum
+# --- Node.js / Web ---
+web/node_modules/
+web/dist/
+web/npm-debug.log*
+web/yarn-debug.log*
+web/yarn-error.log*
+web/.env
+web/.env.*
 
-# env file
-.env
+# --- General ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
 
-# Editor/IDE
-# .idea/
-# .vscode/
+# --- Docker ---
+docker-compose.override.yml
+
+# --- App Specific ---
+# Ignore data directories created by docker-compose
+data/
+letsencrypt/
+projects/
+# Keep gitkeep if present
+!data/.gitkeep
+!projects/.gitkeep
+!letsencrypt/.gitkeep
