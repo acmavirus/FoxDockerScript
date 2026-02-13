@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900;
+  margin: 0;
+  overflow-x: hidden;
+}
+
+.dark body {
+  @apply bg-dark-bg text-slate-100;
+}
+
+.glass-card {
+  @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-xl rounded-2xl;
+}
+
+.dark .glass-card {
+  @apply bg-dark-card/80 border-dark-border;
+}
+
+.button-primary {
+  @apply bg-fox-500 hover:bg-fox-600 text-white font-semibold py-2 px-4 rounded-xl transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg shadow-fox-500/30;
+}
+
+.sidebar-item {
+  @apply flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 cursor-pointer hover:bg-fox-500/10 hover:text-fox-500;
+}
+
+.sidebar-item.active {
+  @apply bg-fox-500 text-white shadow-lg shadow-fox-500/40;
+}

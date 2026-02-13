@@ -1,0 +1,27 @@
+{
+  "name": "web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@vueuse/core": "^14.2.1",
+    "axios": "^1.13.5",
+    "lucide-vue-next": "^0.564.0",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "autoprefixer": "^10.4.24",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.19",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.0",
+    "vue-tsc": "^2.1.10"
+  }
+}

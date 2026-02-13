@@ -1,0 +1,13 @@
+# Copyright by AcmaTvirus
+version: '3.8'
+services:
+  web:
+    image: nginx:alpine
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.{{.ProjectName}}.rule=Host(\`{{.Domain}}\`)"
+    networks:
+      - fox-net
+networks:
+  fox-net:
+    external: true
