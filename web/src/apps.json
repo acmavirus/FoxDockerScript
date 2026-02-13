@@ -1,0 +1,72 @@
+[
+    {
+        "id": "wordpress",
+        "name": "WordPress",
+        "category": "CMS",
+        "description": "CMS phổ biến nhất thế giới.",
+        "icon": "https://img.icons8.com/color/48/wordpress.png",
+        "image": "wordpress:latest",
+        "ports": "80",
+        "env": [
+            "WORDPRESS_DB_HOST",
+            "WORDPRESS_DB_USER",
+            "WORDPRESS_DB_PASSWORD",
+            "WORDPRESS_DB_NAME"
+        ]
+    },
+    {
+        "id": "redis",
+        "name": "Redis",
+        "category": "Database",
+        "description": "In-memory data store cache cực nhanh.",
+        "icon": "https://img.icons8.com/color/48/redis.png",
+        "image": "redis:alpine",
+        "ports": "6379",
+        "env": []
+    },
+    {
+        "id": "mysql",
+        "name": "MySQL",
+        "category": "Database",
+        "description": "Cơ sở dữ liệu quan hệ mạnh mẽ.",
+        "icon": "https://img.icons8.com/color/48/mysql-logo.png",
+        "image": "mysql:8.0",
+        "ports": "3306",
+        "env": [
+            "MYSQL_ROOT_PASSWORD",
+            "MYSQL_DATABASE",
+            "MYSQL_USER",
+            "MYSQL_PASSWORD"
+        ]
+    },
+    {
+        "id": "nginx",
+        "name": "Nginx",
+        "category": "Web Server",
+        "description": "High Performance HTTP Server.",
+        "icon": "https://img.icons8.com/color/48/nginx.png",
+        "image": "nginx:alpine",
+        "ports": "80",
+        "env": []
+    },
+    {
+        "id": "portainer",
+        "name": "Portainer",
+        "category": "Tool",
+        "description": "Giao diện quản lý Docker nâng cao.",
+        "icon": "https://img.icons8.com/color/48/docker.png",
+        "image": "portainer/portainer-ce:latest",
+        "ports": "9000",
+        "env": []
+    },
+    {
+        "id": "uptime-kuma",
+        "name": "Uptime Kuma",
+        "category": "Tool",
+        "description": "Monitoring tool tự host đẹp mắt.",
+        "icon": "https://uptime.kuma.pet/img/icon.svg",
+        "image": "louislam/uptime-kuma:1",
+        "ports": "3001",
+        "env": []
+    }
+]

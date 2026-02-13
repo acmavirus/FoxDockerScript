@@ -3,8 +3,9 @@
 FROM node:18-alpine AS frontend-builder
 WORKDIR /web
 COPY web/package*.json ./
-# Run npm install if package.json exists, otherwise create dummy dist
-RUN if [ -f package.json ]; then npm install && npm run build; else mkdir -p dist && echo "<h1>FoxDocker UI</h1>" > dist/index.html; fi
+RUN npm install
+COPY web/ .
+RUN npm run build
 
 # Stage 2: Build Backend
 FROM golang:1.21-alpine AS backend-builder

@@ -2,6 +2,7 @@
 // Copyright by AcmaTvirus
 import { ref, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
+import appsData from './apps.json' // Import templates
 import { 
   LayoutDashboard, 
   Layers, 
@@ -25,7 +26,9 @@ import {
   Activity,
   History,
   Timer,
-  Network
+  Network,
+  Download,
+  Server
 } from 'lucide-vue-next'
 
 const currentTab = ref('dashboard')
@@ -51,14 +54,14 @@ let statsInterval: any = null
 
 onMounted(() => {
   fetchStats()
-  statsInterval = setInterval(fetchStats, 3000) // Update every 3 seconds
+  statsInterval = setInterval(fetchStats, 3000)
 })
 
 onUnmounted(() => {
   if (statsInterval) clearInterval(statsInterval)
 })
 
-// Sidebar menu groups with badges and counts
+// Sidebar menu groups
 const sidebarGroups = [
   {
     title: 'Resources',
@@ -101,6 +104,11 @@ const vulnerabilities = [
   { id: 1, target: 'nginx:latest', severity: 'High', desc: 'CVE-2023-XXXX', status: 'pending' },
   { id: 2, target: 'wordpress:latest', severity: 'Medium', desc: 'Outdated Plugin', status: 'scanned' },
 ]
+
+// App Store Logic
+const installApp = (app: any) => {
+  alert(`Đang cài đặt ${app.name}...\n(Tính năng backend đang được phát triển)`)
+}
 </script>
 
 <template>
@@ -406,6 +414,41 @@ const vulnerabilities = [
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- App Store View -->
+        <div v-else-if="currentTab === 'appstore'" class="max-w-6xl mx-auto space-y-8 animate-in slide-in-from-right-10 duration-500">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-3xl font-black tracking-tight flex items-center space-x-3">
+                <ShoppingBag class="w-10 h-10 text-fox-500" />
+                <span>App Store</span>
+              </h2>
+              <p class="text-slate-500 mt-1 font-medium">Kho ứng dụng Docker 1-click cài đặt.</p>
+            </div>
+            <div class="flex space-x-2">
+              <button class="px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-fox-500">CMS</button>
+              <button class="px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-fox-500">Database</button>
+              <button class="px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-fox-500">Tools</button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            <div v-for="app in appsData" :key="app.id" class="glass-card p-6 flex flex-col justify-between hover:border-fox-500/50 transition-all group">
+              <div class="flex items-start justify-between mb-4">
+                <img :src="app.icon" class="w-16 h-16 object-contain group-hover:scale-110 transition-transform drop-shadow-md" alt="icon">
+                <span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-[9px] font-black uppercase tracking-widest text-slate-500 rounded">{{ app.category }}</span>
+              </div>
+              <div class="mb-6">
+                <h3 class="text-lg font-black mb-1">{{ app.name }}</h3>
+                <p class="text-xs text-slate-500 line-clamp-2 h-8">{{ app.description }}</p>
+              </div>
+              <button @click="installApp(app)" class="w-full py-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-fox-500 hover:text-white dark:hover:bg-fox-500 dark:hover:text-white transition-all shadow-md flex items-center justify-center space-x-2">
+                <Download class="w-4 h-4" />
+                <span>Install</span>
+              </button>
             </div>
           </div>
         </div>
