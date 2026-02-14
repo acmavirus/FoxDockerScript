@@ -31,13 +31,32 @@ type FirewallRule struct {
 	Time    string `json:"time"`
 }
 
+type AttackTrend struct {
+	Hour  string `json:"hour"`
+	Count int    `json:"count"`
+}
+
+type AuditLog struct {
+	ID      int    `json:"id"`
+	Time    string `json:"time"`
+	User    string `json:"user"`
+	Action  string `json:"action"`
+	Target  string `json:"target"`
+}
+
 type SecurityStats struct {
-	AttackBlocked24h int `json:"attackBlocked24h"`
-	Score            int `json:"score"`
-	ActiveWafRules   int `json:"activeWafRules"`
-	FirewallRules    int `json:"firewallRules"`
-	BlockedIps       int `json:"blockedIps"`
-	ScannedImages    int `json:"scannedImages"`
+	AttackBlocked24h int           `json:"attackBlocked24h"`
+	Score            int           `json:"score"`
+	ActiveWafRules   int           `json:"activeWafRules"`
+	FirewallRules    int           `json:"firewallRules"`
+	BlockedIps       int           `json:"blockedIps"`
+	ScannedImages    int           `json:"scannedImages"`
+	AttackTrend      []AttackTrend `json:"attackTrend"`
+}
+
+type FirewallConfig struct {
+	Enabled bool     `json:"enabled"`
+	Ports   []string `json:"ports"`
 }
 
 var startTime = time.Now()
@@ -85,6 +104,14 @@ func main() {
 
 		// Security Endpoints
 		api.GET("/security/stats", func(c *gin.Context) {
+			trend := []AttackTrend{
+				{Hour: "14:00", Count: 45},
+				{Hour: "15:00", Count: 68},
+				{Hour: "16:00", Count: 124},
+				{Hour: "17:00", Count: 89},
+				{Hour: "18:00", Count: 210},
+				{Hour: "19:00", Count: 156},
+			}
 			c.JSON(http.StatusOK, SecurityStats{
 				AttackBlocked24h: 1243,
 				Score:            85,
@@ -92,6 +119,7 @@ func main() {
 				FirewallRules:    12,
 				BlockedIps:       154,
 				ScannedImages:    48,
+				AttackTrend:      trend,
 			})
 		})
 
@@ -104,15 +132,23 @@ func main() {
 			c.JSON(http.StatusOK, rules)
 		})
 
-		api.POST("/security/firewall", func(c *gin.Context) {
-			var rule FirewallRule
-			if err := c.ShouldBindJSON(&rule); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
+		api.GET("/security/firewall/config", func(c *gin.Context) {
+			c.JSON(http.StatusOK, FirewallConfig{
+				Enabled: true,
+				Ports:   []string{"80", "443", "22", "8888"},
+			})
+		})
+
+		api.POST("/security/firewall/toggle", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"status": "success", "enabled": true})
+		})
+
+		api.GET("/security/audit", func(c *gin.Context) {
+			logs := []AuditLog{
+				{ID: 1, Time: "2026-02-14 18:30:00", User: "AcmaTvirus", Action: "Update Project", Target: "1998.best"},
+				{ID: 2, Time: "2026-02-14 18:45:00", User: "AcmaTvirus", Action: "Stop Container", Target: "db-mysql"},
 			}
-			rule.ID = int(time.Now().Unix())
-			rule.Time = "Just now"
-			c.JSON(http.StatusCreated, rule)
+			c.JSON(http.StatusOK, logs)
 		})
 
 		api.GET("/security/logs", func(c *gin.Context) {

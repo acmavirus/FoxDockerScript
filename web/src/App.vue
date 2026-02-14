@@ -31,6 +31,7 @@ import {
 } from 'lucide-vue-next'
 
 const currentTab = ref('dashboard')
+const securitySubTab = ref('overview')
 
 interface SidebarItem {
   id: string
@@ -65,14 +66,27 @@ const fetchStats = async () => {
 
 const fetchSecurityData = async () => {
   try {
-    const [statsRes, firewallRes] = await Promise.all([
+    const [statsRes, firewallRes, configRes, auditRes] = await Promise.all([
       axios.get('/api/security/stats'),
-      axios.get('/api/security/firewall')
+      axios.get('/api/security/firewall'),
+      axios.get('/api/security/firewall/config'),
+      axios.get('/api/security/audit')
     ])
     securityStats.value = statsRes.data
     firewallActivity.value = firewallRes.data
+    firewallConfig.value = configRes.data
+    auditLogs.value = auditRes.data
   } catch (error) {
     console.error('Failed to fetch security data:', error)
+  }
+}
+
+const toggleFirewall = async () => {
+  try {
+    const res = await axios.post('/api/security/firewall/toggle')
+    firewallConfig.value.enabled = res.data.enabled
+  } catch (error) {
+    alert('Failed to toggle firewall')
   }
 }
 
@@ -155,7 +169,8 @@ const securityStats = ref({
   blockedIps: 0,
   scannedImages: 0,
   attackBlocked24h: 0,
-  activeWafRules: 0
+  activeWafRules: 0,
+  attackTrend: [] as any[]
 })
 
 const topAttackingIps = ref([
@@ -165,6 +180,8 @@ const topAttackingIps = ref([
 ])
 
 const firewallActivity = ref<any[]>([])
+const firewallConfig = ref({ enabled: true, ports: [] as string[] })
+const auditLogs = ref<any[]>([])
 
 const securityFeatures = [
   { id: 'firewall', name: 'Port Firewall', desc: 'Manage iptables/ufw ports', status: 'Active', icon: ShieldCheck, color: 'text-blue-500' },
@@ -450,169 +467,337 @@ const installApp = (app: any) => {
           <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
             <div class="glass-card p-4 flex flex-col items-center justify-center border-t-4 border-fox-500">
               <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Security Score</span>
-              <div class="text-3xl font-black text-fox-500">{{ securityStats.score }}%</div>
-            </div>
-            <div class="glass-card p-4 flex flex-col items-center justify-center border-t-4 border-blue-500">
-              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Firewall Rules</span>
-              <div class="text-3xl font-black text-blue-500">{{ securityStats.firewallRules }}</div>
-            </div>
-            <div class="glass-card p-4 flex flex-col items-center justify-center border-t-4 border-red-500">
-              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Blocked IPs</span>
-              <div class="text-3xl font-black text-red-500">{{ securityStats.blockedIps }}</div>
-            </div>
-            <div class="glass-card p-4 flex flex-col items-center justify-center border-t-4 border-purple-500">
-              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Scanned Images</span>
-              <div class="text-3xl font-black text-purple-500">{{ securityStats.scannedImages }}</div>
-            </div>
+              {{ tab }}
+            </button>
           </div>
 
-          <!-- Security Stats Grid -->
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div class="glass-card p-4 flex flex-col items-center justify-center border-t-4 border-red-500">
-              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Attack Blocked (24h)</span>
-              <div class="text-3xl font-black text-red-500">{{ securityStats.attackBlocked24h }}</div>
-            </div>
-            <div class="glass-card p-4 flex flex-col items-center justify-center border-t-4 border-fox-500">
-              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Protection Score</span>
-              <div class="text-3xl font-black text-fox-500">{{ securityStats.score }}%</div>
-            </div>
-            <div class="glass-card p-4 flex flex-col items-center justify-center border-t-4 border-purple-500">
-              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Active WAF Rules</span>
-              <div class="text-3xl font-black text-purple-500">{{ securityStats.activeWafRules }}</div>
-            </div>
-            <div class="glass-card p-4 flex flex-col items-center justify-center border-t-4 border-blue-500">
-              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Firewall Rules</span>
-              <div class="text-3xl font-black text-blue-500">{{ securityStats.firewallRules }}</div>
-            </div>
-          </div>
-
-          <!-- Feature Controls -->
-          <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div v-for="feature in securityFeatures" :key="feature.id" class="glass-card p-4 group cursor-pointer hover:border-fox-500/50 transition-all shadow-sm">
-              <div class="flex items-center space-x-3 mb-2">
-                <component :is="feature.icon" :class="`w-5 h-5 ${feature.color}`" />
-                <span class="text-xs font-black tracking-tight">{{ feature.name }}</span>
-              </div>
-              <p class="text-[9px] text-slate-400 font-medium mb-3 leading-tight">{{ feature.desc }}</p>
-              <div class="flex items-center justify-between">
-                <span class="text-[9px] font-black uppercase tracking-widest text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded-md">{{ feature.status }}</span>
-                <div class="w-8 h-4 bg-fox-500 rounded-full flex items-center px-1">
-                   <div class="w-2.5 h-2.5 bg-white rounded-full ml-auto"></div>
+          <!-- Tab Content: Overview -->
+          <div v-if="securitySubTab === 'overview'" class="space-y-8 animate-in fade-in duration-500">
+            <!-- Attack Stats Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div class="glass-card p-6 border-t-4 border-red-500 group hover:scale-[1.02] transition-transform">
+                <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Attacks Blocked (24h)</span>
+                <div class="flex items-end justify-between">
+                  <div class="text-4xl font-black text-red-500">{{ securityStats.attackBlocked24h }}</div>
+                  <div class="w-16 h-8 bg-red-500/10 rounded overflow-hidden flex items-end px-1 pb-1">
+                    <div v-for="i in 5" :key="i" class="w-2 bg-red-500/30 rounded-t-sm mx-0.5" :style="{ height: (20 + Math.random() * 80) + '%' }"></div>
+                  </div>
                 </div>
               </div>
+              <div class="glass-card p-6 border-t-4 border-fox-500">
+                <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Protection Score</span>
+                <div class="text-4xl font-black text-fox-500">{{ securityStats.score }}%</div>
+                <p class="text-[10px] font-bold text-green-500 mt-1 uppercase tracking-tighter">Everything is secure</p>
+              </div>
+              <div class="glass-card p-6 border-t-4 border-purple-500">
+                <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">WAF Blocks</span>
+                <div class="text-4xl font-black text-purple-500">{{ (securityStats.attackBlocked24h * 0.4).toFixed(0) }}</div>
+                <p class="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-tighter">Web layer protection active</p>
+              </div>
+              <div class="glass-card p-6 border-t-4 border-blue-500">
+                <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Firewall Drops</span>
+                <div class="text-4xl font-black text-blue-500">{{ (securityStats.attackBlocked24h * 0.6).toFixed(0) }}</div>
+                <p class="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-tighter">Network layer isolation</p>
+              </div>
             </div>
-          </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Critical Alerts -->
-            <div class="lg:col-span-2 glass-card p-6 border-l-4 border-red-500 shadow-md h-full">
-              <h3 class="font-black text-xs uppercase tracking-widest mb-4 flex items-center space-x-2 text-red-500">
-                <Bell class="w-4 h-4" />
-                <span>Threat Intelligence Logs</span>
-              </h3>
-              <div class="space-y-4">
-                <div v-for="v in vulnerabilities" :key="v.id" class="p-4 bg-red-500/5 rounded-xl border border-red-500/10 flex justify-between items-center group cursor-pointer hover:bg-red-500/10 transition-colors">
-                  <div class="flex items-center space-x-4">
-                    <div class="w-10 h-10 bg-red-500/10 rounded-lg flex items-center justify-center text-red-500">
-                      <ShieldCheck class="w-5 h-5" />
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <!-- Traffic Trend Simulation -->
+              <div class="lg:col-span-2 glass-card p-6 shadow-md h-full min-h-[300px] flex flex-col">
+                <div class="flex items-center justify-between mb-8">
+                  <h3 class="font-black text-xs uppercase tracking-widest flex items-center space-x-2 text-slate-600 dark:text-slate-300">
+                    <Activity class="w-4 h-4" />
+                    <span>Attack Traffic Trend (Hourly)</span>
+                  </h3>
+                  <span class="text-[9px] font-bold bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">Last 6 Hours</span>
+                </div>
+                <!-- Simple SVG Chart -->
+                <div class="flex-1 flex items-end justify-between px-4 pb-8 border-b border-slate-100 dark:border-dark-border">
+                  <div v-for="(point, idx) in securityStats.attackTrend" :key="idx" class="flex flex-col items-center group w-full">
+                    <div 
+                      class="w-12 bg-fox-500/10 hover:bg-fox-500 transition-all rounded-t-xl relative cursor-pointer" 
+                      :style="{ height: (point.count / 300 * 100) + '%' }"
+                    >
+                      <div class="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 text-white text-[10px] py-1 px-2 rounded font-black">
+                        {{ point.count }}
+                      </div>
                     </div>
-                    <div>
-                      <p class="font-black text-sm">{{ v.target }}</p>
-                      <p class="text-xs text-red-400 font-medium">Attempt identified: {{ v.desc }}</p>
-                    </div>
-                  </div>
-                  <span class="px-2 py-1 bg-red-100 dark:bg-red-500/20 text-red-600 text-[9px] font-black rounded uppercase tracking-widest">{{ v.severity }}</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Top Attacking IPs -->
-            <div class="glass-card p-6 shadow-md border-t-4 border-slate-900 dark:border-white">
-              <h3 class="font-black text-xs uppercase tracking-widest mb-4 flex items-center space-x-2">
-                <Globe class="w-4 h-4" />
-                <span>Top Attacking IPs</span>
-              </h3>
-              <div class="space-y-4">
-                <div v-for="ip in topAttackingIps" :key="ip.ip" class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-dark-border">
-                  <div class="flex items-center space-x-3">
-                    <span class="text-[10px] bg-slate-200 dark:bg-slate-700 font-black px-1.5 py-0.5 rounded">{{ ip.country }}</span>
-                    <span class="text-xs font-mono font-bold">{{ ip.ip }}</span>
-                  </div>
-                  <div class="text-right">
-                    <p class="text-[10px] font-black text-red-500">{{ ip.count }} Req</p>
-                    <p class="text-[9px] text-slate-400 italic">Last: {{ ip.time }}</p>
+                    <span class="mt-4 text-[9px] font-black text-slate-400 uppercase tracking-tighter">{{ point.hour }}</span>
                   </div>
                 </div>
               </div>
-              <button class="w-full mt-6 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-fox-500 transition-colors">Exporter Blacklist (CSV)</button>
-            </div>
-          </div>
 
-          <!-- Webhook Settings (Moved below) -->
-          <div class="glass-card p-6 shadow-sm border border-fox-500/10 bg-gradient-to-r from-fox-500/5 to-transparent">
-            <div class="flex items-center justify-between">
-              <div>
-                <h3 class="font-black text-xs uppercase tracking-widest mb-1 flex items-center space-x-2 text-fox-500">
-                  <Activity class="w-4 h-4" />
-                  <span>Security Notifications</span>
+              <!-- Top IPs -->
+              <div class="glass-card p-6 shadow-md border-t-4 border-slate-900 dark:border-white">
+                <h3 class="font-black text-xs uppercase tracking-widest mb-6 flex items-center space-x-2">
+                  <Globe class="w-4 h-4" />
+                  <span>Top Attacking IPs</span>
                 </h3>
-                <p class="text-[10px] text-slate-500 font-medium italic">Push alerts for brute force and WAF blocks via Telegram/Discord.</p>
-              </div>
-              <div class="flex space-x-4">
-                <button class="flex items-center space-x-2 px-4 py-2 bg-blue-500/10 text-blue-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 hover:text-white transition-all">
-                  <Bell class="w-3.5 h-3.5" />
-                  <span>Telegram Config</span>
-                </button>
-                <button class="flex items-center space-x-2 px-4 py-2 bg-purple-500/10 text-purple-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-500 hover:text-white transition-all">
-                  <Activity class="w-3.5 h-3.5" />
-                  <span>Discord Config</span>
+                <div class="space-y-5">
+                  <div v-for="ip in topAttackingIps" :key="ip.ip" class="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-dark-border group hover:border-red-500/30 transition-all cursor-pointer">
+                    <div class="flex items-center space-x-3">
+                      <span class="text-[10px] bg-red-500/10 text-red-600 font-black px-1.5 py-0.5 rounded tracking-widest">{{ ip.country }}</span>
+                      <span class="text-xs font-mono font-bold">{{ ip.ip }}</span>
+                    </div>
+                    <div class="text-right">
+                      <p class="text-[10px] font-black text-slate-700 dark:text-slate-200">{{ ip.count }} Req</p>
+                      <p class="text-[9px] text-slate-400 italic">{{ ip.time }}</p>
+                    </div>
+                  </div>
+                </div>
+                <button class="w-full mt-8 py-3 bg-red-500/10 text-red-500 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-red-500 hover:text-white transition-all">
+                  Sync IP Blacklist
                 </button>
               </div>
             </div>
           </div>
 
-          <!-- Firewall Activity -->
-          <div class="glass-card overflow-hidden shadow-md">
-            <div class="p-6 border-b border-slate-200 dark:border-dark-border flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
-              <h3 class="text-xl font-black tracking-tight flex items-center space-x-2">
-                <ShieldCheck class="w-5 h-5 text-fox-500" />
-                <span>Recent Firewall Activity</span>
-              </h3>
-              <button class="text-fox-500 text-[10px] font-black uppercase tracking-widest hover:underline">View All Logs</button>
+          <!-- Tab Content: Firewall -->
+          <div v-else-if="securitySubTab === 'firewall'" class="space-y-8 animate-in slide-in-from-right-10 duration-500">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div class="glass-card p-6 flex flex-col justify-between h-48 border-l-4 border-blue-500">
+                <div>
+                  <h4 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Global Status (UFW/IPT)</h4>
+                  <div class="flex items-center space-x-3">
+                    <div class="w-3 h-3 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"></div>
+                    <span class="text-2xl font-black">PROTECTED</span>
+                  </div>
+                </div>
+                <button @click="toggleFirewall" class="w-full py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-[10px] font-black uppercase tracking-widest">
+                  DEACTIVATE FIREWALL
+                </button>
+              </div>
+              
+              <div class="lg:col-span-2 glass-card p-6 shadow-md h-48">
+                <div class="flex items-center justify-between mb-4">
+                  <h4 class="text-xs font-black uppercase tracking-widest text-slate-400">Whitelisted Infrastructure Ports</h4>
+                  <button class="p-1.5 bg-fox-500/10 text-fox-500 rounded-lg hover:bg-fox-500 hover:text-white transition-all">
+                    <Plus class="w-4 h-4" />
+                  </button>
+                </div>
+                <div class="flex flex-wrap gap-3">
+                  <div v-for="port in firewallConfig.ports" :key="port" class="px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-dark-border flex items-center space-x-3 group">
+                    <span class="text-xs font-mono font-bold">{{ port }}</span>
+                    <span class="text-[9px] font-black text-slate-400 uppercase">TCP</span>
+                    <button class="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                      <LogOut class="w-3 h-3 rotate-180" />
+                    </button>
+                  </div>
+                </div>
+                <p class="text-[9px] text-slate-400 mt-6 italic">* Traffic on all other ports is implicitly dropped by Traefik/Docker stack.</p>
+              </div>
             </div>
-            <div class="overflow-x-auto">
-              <table class="w-full text-left">
-                <thead>
-                  <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-dark-border">
-                    <th class="px-6 py-4 text-center">Protocol</th>
-                    <th class="px-6 py-4">IP Address</th>
-                    <th class="px-6 py-4">Action</th>
-                    <th class="px-6 py-4">Reason</th>
-                    <th class="px-6 py-4">Timestamp</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100 dark:divide-dark-border">
-                  <tr v-for="log in firewallActivity" :key="log.id" class="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors">
-                    <td class="px-6 py-4 text-center">
-                       <span class="text-[9px] font-black bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500">TCP</span>
-                    </td>
-                    <td class="px-6 py-4 font-mono text-xs font-bold">{{ log.ip }}</td>
-                    <td class="px-6 py-4">
-                      <span :class="log.action === 'Blocked' ? 'text-red-500 bg-red-500/10' : 'text-green-500 bg-green-500/10'" class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter">
-                        {{ log.action }}
-                      </span>
-                    </td>
-                    <td class="px-6 py-4">
-                      <p class="text-xs font-bold text-slate-700 dark:text-slate-300">{{ log.reason }}</p>
-                      <p class="text-[9px] text-slate-400">Target: {{ log.target }}</p>
-                    </td>
-                    <td class="px-6 py-4 text-xs text-slate-400 italic font-medium">{{ log.time }}</td>
-                  </tr>
-                </tbody>
-              </table>
+
+            <!-- Firewall Activity Table -->
+            <div class="glass-card overflow-hidden shadow-md">
+              <div class="p-6 border-b border-slate-200 dark:border-dark-border flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
+                <h3 class="text-xl font-black tracking-tight flex items-center space-x-2">
+                  <ShieldCheck class="w-5 h-5 text-fox-500" />
+                  <span>Real-time Network Filter</span>
+                </h3>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                  <thead>
+                    <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-dark-border">
+                      <th class="px-6 py-4">IP Address</th>
+                      <th class="px-6 py-4">Action</th>
+                      <th class="px-6 py-4">Security Reason</th>
+                      <th class="px-6 py-4 text-right px-8">Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100 dark:divide-dark-border">
+                    <tr v-for="log in firewallActivity" :key="log.id" class="hover:bg-slate-100/50 dark:hover:bg-slate-800/30 transition-colors">
+                      <td class="px-6 py-4 font-mono text-xs font-bold">{{ log.ip }}</td>
+                      <td class="px-6 py-4">
+                        <span :class="log.action === 'Blocked' ? 'text-red-500 bg-red-500/10' : 'text-green-500 bg-green-500/10'" class="px-2 py-0.5 rounded text-[10px] font-black uppercase">
+                          {{ log.action }}
+                        </span>
+                      </td>
+                      <td class="px-6 py-4">
+                        <p class="text-xs font-bold text-slate-700 dark:text-slate-300">{{ log.reason }}</p>
+                        <p class="text-[9px] text-fox-500 font-black uppercase tracking-widest">Target: {{ log.target }}</p>
+                      </td>
+                      <td class="px-6 py-4 text-right text-xs text-slate-400 font-medium px-8">{{ log.time }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
+          </div>
+
+          <!-- Tab Content: Fail2Ban -->
+          <div v-else-if="securitySubTab === 'fail2ban'" class="space-y-8 animate-in slide-in-from-right-10 duration-500">
+             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="glass-card p-6 border-l-4 border-red-500">
+                   <h3 class="font-black text-xs uppercase tracking-widest mb-6 flex items-center space-x-2 text-red-500">
+                     <ShieldCheck class="w-4 h-4" />
+                     <span>Brute Force Protection Jails</span>
+                   </h3>
+                   <div class="space-y-4">
+                      <div v-for="jail in ['SSHd', 'Web-Admin', 'API-Gateway']" :key="jail" class="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-dark-border">
+                         <div>
+                            <p class="text-sm font-bold">{{ jail }}</p>
+                            <p class="text-[10px] text-slate-400 font-medium">Bantime: 3600s | MaxRetry: 5</p>
+                         </div>
+                         <div class="flex items-center space-x-4">
+                            <span class="text-[10px] font-black uppercase text-green-500">Running</span>
+                            <div class="w-10 h-5 bg-fox-500 rounded-full flex items-center px-1 shadow-inner cursor-pointer">
+                              <div class="w-3.5 h-3.5 bg-white rounded-full ml-auto shadow-sm"></div>
+                            </div>
+                         </div>
+                      </div>
+                   </div>
+                </div>
+
+                <div class="glass-card p-6">
+                   <h3 class="font-black text-xs uppercase tracking-widest mb-6">Persistent Ban Policy</h3>
+                   <div class="space-y-6">
+                      <div class="space-y-2">
+                         <label class="text-[10px] font-black uppercase tracking-widest text-slate-400">Default Ban Duration</label>
+                         <select class="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-xl py-3 px-4 text-xs font-bold outline-none focus:ring-2 focus:ring-fox-500">
+                            <option>1 Hour</option>
+                            <option>24 Hours</option>
+                            <option>vĩnh viễn (Permaban)</option>
+                         </select>
+                      </div>
+                      <div class="space-y-2">
+                         <label class="text-[10px] font-black uppercase tracking-widest text-slate-400">Max Login Retries</label>
+                         <div class="flex items-center space-x-4">
+                            <input type="range" min="1" max="10" value="3" class="flex-1 accent-fox-500">
+                            <span class="text-xl font-black text-fox-500 w-8 text-center">3</span>
+                         </div>
+                      </div>
+                      <button class="w-full py-3 bg-fox-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-fox-500/30">Save Jail Config</button>
+                   </div>
+                </div>
+             </div>
+          </div>
+
+          <!-- Tab Content: Isolation -->
+          <div v-else-if="securitySubTab === 'isolation'" class="space-y-8 animate-in slide-in-from-right-10 duration-500">
+             <div class="glass-card p-6 border-l-4 border-orange-500 bg-orange-500/5">
+                <div class="flex items-start justify-between">
+                   <div class="space-y-1">
+                      <h3 class="text-xl font-black tracking-tight">Docker Network Sandboxing</h3>
+                      <p class="text-sm text-slate-500 font-medium italic">All projects (1998.best, blackdragon.mobi, etc.) are isolated by default.</p>
+                   </div>
+                   <span class="px-3 py-1 bg-orange-500 text-white text-[10px] font-black rounded-lg uppercase tracking-widest animate-pulse">Standard Active</span>
+                </div>
+             </div>
+
+             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="glass-card p-6">
+                   <h3 class="font-black text-xs uppercase tracking-widest mb-6">Global Resource Quotas (DoS Protection)</h3>
+                   <div class="space-y-6">
+                      <div class="space-y-4">
+                         <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold">Max Projects CPU Usage</span>
+                            <span class="text-xs font-black text-fox-500">80% Total</span>
+                         </div>
+                         <div class="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div class="h-full bg-fox-500 w-[80%]"></div>
+                         </div>
+                      </div>
+                      <div class="space-y-4">
+                         <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold">Max Projects RAM Limit</span>
+                            <span class="text-xs font-black text-purple-500">90% System</span>
+                         </div>
+                         <div class="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div class="h-full bg-purple-500 w-[90%]"></div>
+                         </div>
+                      </div>
+                      <p class="text-[10px] text-slate-400 leading-relaxed">* These ceilings prevent a single compromised website from crashing the entire Host OS.</p>
+                   </div>
+                </div>
+
+                <div class="glass-card p-6">
+                   <h3 class="font-black text-xs uppercase tracking-widest mb-6">Immutable Filesystem Toggle</h3>
+                   <div class="space-y-4">
+                      <p class="text-xs text-slate-500 font-medium mb-4">Prevent attackers from writing webshells or persistent malware into running containers.</p>
+                      <div class="flex items-center justify-between p-4 bg-slate-100 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-300 dark:border-dark-border">
+                         <span class="text-xs font-black uppercase text-slate-500">ReadOnly Root FS</span>
+                         <div class="w-10 h-5 bg-slate-200 dark:bg-slate-700 rounded-full flex items-center px-1">
+                           <div class="w-3.5 h-3.5 bg-white rounded-full shadow-sm"></div>
+                         </div>
+                      </div>
+                      <p class="text-[9px] text-red-400 font-bold uppercase tracking-tighter mt-4">⚠️ Warning: Enabling this may break applications that require local writes (logs/cache).</p>
+                   </div>
+                </div>
+             </div>
+          </div>
+
+          <!-- Tab Content: IAM -->
+          <div v-else-if="securitySubTab === 'iam'" class="space-y-8 animate-in slide-in-from-right-10 duration-500">
+             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- SSH Keys -->
+                <div class="lg:col-span-2 glass-card p-6">
+                   <div class="flex items-center justify-between mb-6">
+                      <h3 class="font-black text-xs uppercase tracking-widest flex items-center space-x-2">
+                        <Terminal class="w-4 h-4" />
+                        <span>SSH Authorized Keys</span>
+                      </h3>
+                      <button class="button-primary text-[10px] px-4 py-1.5 font-black uppercase tracking-widest">Add New Key</button>
+                   </div>
+                   <div class="space-y-3">
+                      <div v-for="key in ['MacBook-Pro-Admin', 'Deplo-Bot-Key']" :key="key" class="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-dark-border flex items-center justify-between group">
+                         <div class="flex items-center space-x-4">
+                            <div class="w-10 h-10 bg-slate-100 dark:bg-slate-900 rounded-lg flex items-center justify-center text-slate-400">
+                               <Terminal class="w-5 h-5" />
+                            </div>
+                            <div>
+                               <p class="text-sm font-bold">{{ key }}</p>
+                               <p class="text-[10px] font-mono text-slate-400">ssh-rsa AAAAB3Nza...[Truncated]</p>
+                            </div>
+                         </div>
+                         <button class="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all font-black text-[9px] uppercase tracking-widest">Revoke Access</button>
+                      </div>
+                   </div>
+                </div>
+
+                <!-- 2FA -->
+                <div class="glass-card p-6 border-t-4 border-fox-500">
+                   <h3 class="font-black text-xs uppercase tracking-widest mb-6">Identity Security</h3>
+                   <div class="space-y-6">
+                      <div class="flex justify-between items-center p-4 bg-fox-500/5 rounded-xl border border-fox-500/20">
+                         <div>
+                            <p class="text-sm font-bold">Two-Factor (2FA)</p>
+                            <p class="text-[10px] text-slate-500">Google Authenticator</p>
+                         </div>
+                         <div class="w-10 h-5 bg-slate-200 dark:bg-slate-700 rounded-full flex items-center px-1">
+                           <div class="w-3.5 h-3.5 bg-white rounded-full shadow-sm"></div>
+                         </div>
+                      </div>
+                      <p class="text-[10px] text-slate-400 leading-relaxed italic">Enable 2FA to protect the FoxDocker Web Admin from authorized logins even if your password is compromised.</p>
+                      <button class="w-full py-3 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-[10px] font-black uppercase tracking-widest hover:border-fox-500 transition-all">Change Admin Password</button>
+                   </div>
+                </div>
+             </div>
+
+             <!-- Audit Logs -->
+             <div class="glass-card overflow-hidden shadow-md">
+                <div class="p-6 border-b border-slate-200 dark:border-dark-border flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
+                  <h3 class="text-xl font-black tracking-tight flex items-center space-x-2">
+                    <History class="w-5 h-5 text-slate-400" />
+                    <span>System Audit Trail</span>
+                  </h3>
+                </div>
+                <div class="p-4 space-y-2">
+                   <div v-for="log in auditLogs" :key="log.ID" class="group flex items-center space-x-6 p-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 rounded-xl transition-colors border border-transparent hover:border-slate-200 dark:hover:border-dark-border">
+                      <span class="text-[10px] font-mono text-slate-400 w-32 shrink-0">{{ log.Time }}</span>
+                      <div class="flex items-center space-x-2 w-32 shrink-0">
+                         <div class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[9px] font-black uppercase tracking-tighter">{{ log.User[0] }}</div>
+                         <span class="text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-300">{{ log.User }}</span>
+                      </div>
+                      <span class="text-xs font-bold text-slate-500 flex-1">{{ log.Action }}</span>
+                      <span class="text-[10px] font-black uppercase tracking-widest px-2 py-1 bg-slate-100 dark:bg-slate-900 rounded text-slate-400 group-hover:bg-fox-500/10 group-hover:text-fox-500 transition-colors">{{ log.Target }}</span>
+                   </div>
+                </div>
+             </div>
           </div>
         </div>
+
 
         <!-- App Store View -->
         <div v-else-if="currentTab === 'appstore'" class="max-w-6xl mx-auto space-y-8 animate-in slide-in-from-right-10 duration-500">
