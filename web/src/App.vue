@@ -27,11 +27,24 @@ import {
   History,
   Timer,
   Network,
-  Download,
-  Server
+  Download
 } from 'lucide-vue-next'
 
 const currentTab = ref('dashboard')
+
+interface SidebarItem {
+  id: string
+  label: string
+  icon: any
+  count?: number
+  badge?: string
+  alert?: boolean
+}
+
+interface SidebarGroup {
+  title: string
+  items: SidebarItem[]
+}
 
 // Real-time System Stats
 const sysStats = ref({
@@ -62,7 +75,7 @@ onUnmounted(() => {
 })
 
 // Sidebar menu groups
-const sidebarGroups = [
+const sidebarGroups: SidebarGroup[] = [
   {
     title: 'Resources',
     items: [
