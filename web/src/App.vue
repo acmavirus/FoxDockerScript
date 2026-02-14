@@ -73,6 +73,7 @@ const fetchSecurityData = async () => {
       axios.get('/api/security/audit')
     ])
     securityStats.value = statsRes.data
+    topAttackingIps.value = statsRes.data.topAttackingIps || []
     firewallActivity.value = firewallRes.data
     firewallConfig.value = configRes.data
     auditLogs.value = auditRes.data
@@ -168,11 +169,7 @@ const securityStats = ref({
   attackTrend: [] as any[]
 })
 
-const topAttackingIps = ref([
-  { ip: '45.155.205.233', country: 'RU', count: 456, time: '1m ago' },
-  { ip: '185.224.128.11', country: 'CN', count: 312, time: '5m ago' },
-  { ip: '92.118.160.17', country: 'US', count: 89, time: '12m ago' }
-])
+const topAttackingIps = ref<any[]>([])
 
 const firewallActivity = ref<any[]>([])
 const firewallConfig = ref({ enabled: true, ports: [] as string[] })
