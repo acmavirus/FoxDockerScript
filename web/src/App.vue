@@ -63,15 +63,46 @@ const fetchStats = async () => {
   }
 }
 
+const fetchSecurityData = async () => {
+  try {
+    const [statsRes, firewallRes] = await Promise.all([
+      axios.get('/api/security/stats'),
+      axios.get('/api/security/firewall')
+    ])
+    securityStats.value = statsRes.data
+    firewallActivity.value = firewallRes.data
+  } catch (error) {
+    console.error('Failed to fetch security data:', error)
+  }
+}
+
+const scanning = ref(false)
+const runSecurityScan = async () => {
+  scanning.value = true
+  try {
+    const response = await axios.post('/api/security/scan')
+    alert(response.data.message)
+    await fetchSecurityData()
+  } catch (error) {
+    alert('Failed to trigger security scan')
+  } finally {
+    scanning.value = false
+  }
+}
+
 let statsInterval: any = null
+let securityInterval: any = null
 
 onMounted(() => {
   fetchStats()
+  fetchSecurityData()
   statsInterval = setInterval(fetchStats, 3000)
+  securityInterval = setInterval(fetchSecurityData, 10000)
 })
 
 onUnmounted(() => {
   if (statsInterval) clearInterval(statsInterval)
+  if (securityInterval) clearInterval(securityInterval)
 })
 
 // Sidebar menu groups
@@ -116,6 +147,31 @@ const recentProjects = [
 const vulnerabilities = [
   { id: 1, target: 'nginx:latest', severity: 'High', desc: 'CVE-2023-XXXX', status: 'pending' },
   { id: 2, target: 'wordpress:latest', severity: 'Medium', desc: 'Outdated Plugin', status: 'scanned' },
+]
+
+const securityStats = ref({
+  score: 0,
+  firewallRules: 0,
+  blockedIps: 0,
+  scannedImages: 0,
+  attackBlocked24h: 0,
+  activeWafRules: 0
+})
+
+const topAttackingIps = ref([
+  { ip: '45.155.205.233', country: 'RU', count: 456, time: '1m ago' },
+  { ip: '185.224.128.11', country: 'CN', count: 312, time: '5m ago' },
+  { ip: '92.118.160.17', country: 'US', count: 89, time: '12m ago' }
+])
+
+const firewallActivity = ref<any[]>([])
+
+const securityFeatures = [
+  { id: 'firewall', name: 'Port Firewall', desc: 'Manage iptables/ufw ports', status: 'Active', icon: ShieldCheck, color: 'text-blue-500' },
+  { id: 'fail2ban', name: 'Fail2Ban', desc: 'Auto-block brute force', status: 'Running', icon: Activity, color: 'text-red-500' },
+  { id: 'ssl', name: 'SSL Monitoring', desc: 'Traefik ACME Status', status: 'Healthy', icon: Globe, color: 'text-green-500' },
+  { id: 'waf', name: 'WAF (ModSec)', desc: 'SQLi & XSS Protection', status: 'Active', icon: ShieldCheck, color: 'text-purple-500' },
+  { id: 'isolation', name: 'Isolation', desc: 'Container Network Segregation', status: 'Active', icon: Box, color: 'text-orange-500' }
 ]
 
 // App Store Logic
@@ -232,6 +288,10 @@ const installApp = (app: any) => {
         </div>
 
         <div class="flex items-center space-x-4">
+          <div v-if="currentTab === 'security'" class="flex items-center space-x-2 bg-red-500/10 px-3 py-1.5 rounded-xl border border-red-500/20">
+            <ShieldCheck class="w-4 h-4 text-red-500 animate-pulse" />
+            <span class="text-[10px] font-black uppercase tracking-widest text-red-500">System Protected</span>
+          </div>
           <button class="relative p-2.5 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-xl transition-all">
             <Bell class="w-5 h-5" />
             <span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-dark-card animate-pulse"></span>
@@ -376,57 +436,180 @@ const installApp = (app: any) => {
               </h2>
               <p class="text-slate-500 mt-1 font-medium">Quét và bảo vệ hạ tầng Docker bằng FoxAudit Engine.</p>
             </div>
-            <button class="button-primary bg-red-500 hover:bg-red-600 shadow-red-500/30 group">
-               <Activity class="w-4 h-4 group-hover:animate-spin" />
-               <span>Run Security Scan</span>
+            <button 
+              @click="runSecurityScan" 
+              :disabled="scanning"
+              class="button-primary bg-red-500 hover:bg-red-600 shadow-red-500/30 group disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+               <Activity class="w-4 h-4 group-hover:animate-spin" :class="{ 'animate-spin': scanning }" />
+               <span>{{ scanning ? 'Scanning...' : 'Run Security Scan' }}</span>
             </button>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="glass-card p-6 border-l-4 border-red-500 shadow-md">
+          <!-- Security Stats Grid -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div class="glass-card p-4 flex flex-col items-center justify-center border-t-4 border-fox-500">
+              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Security Score</span>
+              <div class="text-3xl font-black text-fox-500">{{ securityStats.score }}%</div>
+            </div>
+            <div class="glass-card p-4 flex flex-col items-center justify-center border-t-4 border-blue-500">
+              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Firewall Rules</span>
+              <div class="text-3xl font-black text-blue-500">{{ securityStats.firewallRules }}</div>
+            </div>
+            <div class="glass-card p-4 flex flex-col items-center justify-center border-t-4 border-red-500">
+              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Blocked IPs</span>
+              <div class="text-3xl font-black text-red-500">{{ securityStats.blockedIps }}</div>
+            </div>
+            <div class="glass-card p-4 flex flex-col items-center justify-center border-t-4 border-purple-500">
+              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Scanned Images</span>
+              <div class="text-3xl font-black text-purple-500">{{ securityStats.scannedImages }}</div>
+            </div>
+          </div>
+
+          <!-- Security Stats Grid -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div class="glass-card p-4 flex flex-col items-center justify-center border-t-4 border-red-500">
+              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Attack Blocked (24h)</span>
+              <div class="text-3xl font-black text-red-500">{{ securityStats.attackBlocked24h }}</div>
+            </div>
+            <div class="glass-card p-4 flex flex-col items-center justify-center border-t-4 border-fox-500">
+              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Protection Score</span>
+              <div class="text-3xl font-black text-fox-500">{{ securityStats.score }}%</div>
+            </div>
+            <div class="glass-card p-4 flex flex-col items-center justify-center border-t-4 border-purple-500">
+              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Active WAF Rules</span>
+              <div class="text-3xl font-black text-purple-500">{{ securityStats.activeWafRules }}</div>
+            </div>
+            <div class="glass-card p-4 flex flex-col items-center justify-center border-t-4 border-blue-500">
+              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Firewall Rules</span>
+              <div class="text-3xl font-black text-blue-500">{{ securityStats.firewallRules }}</div>
+            </div>
+          </div>
+
+          <!-- Feature Controls -->
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div v-for="feature in securityFeatures" :key="feature.id" class="glass-card p-4 group cursor-pointer hover:border-fox-500/50 transition-all shadow-sm">
+              <div class="flex items-center space-x-3 mb-2">
+                <component :is="feature.icon" :class="`w-5 h-5 ${feature.color}`" />
+                <span class="text-xs font-black tracking-tight">{{ feature.name }}</span>
+              </div>
+              <p class="text-[9px] text-slate-400 font-medium mb-3 leading-tight">{{ feature.desc }}</p>
+              <div class="flex items-center justify-between">
+                <span class="text-[9px] font-black uppercase tracking-widest text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded-md">{{ feature.status }}</span>
+                <div class="w-8 h-4 bg-fox-500 rounded-full flex items-center px-1">
+                   <div class="w-2.5 h-2.5 bg-white rounded-full ml-auto"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Critical Alerts -->
+            <div class="lg:col-span-2 glass-card p-6 border-l-4 border-red-500 shadow-md h-full">
               <h3 class="font-black text-xs uppercase tracking-widest mb-4 flex items-center space-x-2 text-red-500">
                 <Bell class="w-4 h-4" />
-                <span>Critical Alerts</span>
+                <span>Threat Intelligence Logs</span>
               </h3>
               <div class="space-y-4">
                 <div v-for="v in vulnerabilities" :key="v.id" class="p-4 bg-red-500/5 rounded-xl border border-red-500/10 flex justify-between items-center group cursor-pointer hover:bg-red-500/10 transition-colors">
-                  <div>
-                    <p class="font-black text-sm">{{ v.target }}</p>
-                    <p class="text-xs text-red-400 font-medium">{{ v.desc }}</p>
+                  <div class="flex items-center space-x-4">
+                    <div class="w-10 h-10 bg-red-500/10 rounded-lg flex items-center justify-center text-red-500">
+                      <ShieldCheck class="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p class="font-black text-sm">{{ v.target }}</p>
+                      <p class="text-xs text-red-400 font-medium">Attempt identified: {{ v.desc }}</p>
+                    </div>
                   </div>
                   <span class="px-2 py-1 bg-red-100 dark:bg-red-500/20 text-red-600 text-[9px] font-black rounded uppercase tracking-widest">{{ v.severity }}</span>
                 </div>
               </div>
             </div>
-            <div class="glass-card p-6 shadow-md border border-fox-500/20">
-              <h3 class="font-black text-xs uppercase tracking-widest mb-4 flex items-center space-x-2 text-fox-500">
-                <Activity class="w-4 h-4" />
-                <span>Integration Webhooks</span>
+
+            <!-- Top Attacking IPs -->
+            <div class="glass-card p-6 shadow-md border-t-4 border-slate-900 dark:border-white">
+              <h3 class="font-black text-xs uppercase tracking-widest mb-4 flex items-center space-x-2">
+                <Globe class="w-4 h-4" />
+                <span>Top Attacking IPs</span>
               </h3>
               <div class="space-y-4">
-                <div class="flex justify-between items-center p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-dark-border">
+                <div v-for="ip in topAttackingIps" :key="ip.ip" class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-dark-border">
                   <div class="flex items-center space-x-3">
-                    <div class="p-2 bg-blue-500/10 rounded-lg text-blue-500">
-                       <Bell class="w-4 h-4" />
-                    </div>
-                    <span class="text-sm font-bold">Telegram Bot</span>
+                    <span class="text-[10px] bg-slate-200 dark:bg-slate-700 font-black px-1.5 py-0.5 rounded">{{ ip.country }}</span>
+                    <span class="text-xs font-mono font-bold">{{ ip.ip }}</span>
                   </div>
-                  <div class="w-10 h-5 bg-fox-500 rounded-full flex items-center px-1 shadow-inner cursor-pointer">
-                    <div class="w-3.5 h-3.5 bg-white rounded-full ml-auto shadow-sm"></div>
-                  </div>
-                </div>
-                <div class="flex justify-between items-center p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-dark-border">
-                  <div class="flex items-center space-x-3">
-                    <div class="p-2 bg-purple-500/10 rounded-lg text-purple-500">
-                       <Activity class="w-4 h-4" />
-                    </div>
-                    <span class="text-sm font-bold">Discord Webhook</span>
-                  </div>
-                  <div class="w-10 h-5 bg-slate-200 dark:bg-slate-700 rounded-full flex items-center px-1 shadow-inner cursor-pointer">
-                    <div class="w-3.5 h-3.5 bg-white rounded-full shadow-sm"></div>
+                  <div class="text-right">
+                    <p class="text-[10px] font-black text-red-500">{{ ip.count }} Req</p>
+                    <p class="text-[9px] text-slate-400 italic">Last: {{ ip.time }}</p>
                   </div>
                 </div>
               </div>
+              <button class="w-full mt-6 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-fox-500 transition-colors">Exporter Blacklist (CSV)</button>
+            </div>
+          </div>
+
+          <!-- Webhook Settings (Moved below) -->
+          <div class="glass-card p-6 shadow-sm border border-fox-500/10 bg-gradient-to-r from-fox-500/5 to-transparent">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="font-black text-xs uppercase tracking-widest mb-1 flex items-center space-x-2 text-fox-500">
+                  <Activity class="w-4 h-4" />
+                  <span>Security Notifications</span>
+                </h3>
+                <p class="text-[10px] text-slate-500 font-medium italic">Push alerts for brute force and WAF blocks via Telegram/Discord.</p>
+              </div>
+              <div class="flex space-x-4">
+                <button class="flex items-center space-x-2 px-4 py-2 bg-blue-500/10 text-blue-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 hover:text-white transition-all">
+                  <Bell class="w-3.5 h-3.5" />
+                  <span>Telegram Config</span>
+                </button>
+                <button class="flex items-center space-x-2 px-4 py-2 bg-purple-500/10 text-purple-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-500 hover:text-white transition-all">
+                  <Activity class="w-3.5 h-3.5" />
+                  <span>Discord Config</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Firewall Activity -->
+          <div class="glass-card overflow-hidden shadow-md">
+            <div class="p-6 border-b border-slate-200 dark:border-dark-border flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
+              <h3 class="text-xl font-black tracking-tight flex items-center space-x-2">
+                <ShieldCheck class="w-5 h-5 text-fox-500" />
+                <span>Recent Firewall Activity</span>
+              </h3>
+              <button class="text-fox-500 text-[10px] font-black uppercase tracking-widest hover:underline">View All Logs</button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left">
+                <thead>
+                  <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-dark-border">
+                    <th class="px-6 py-4 text-center">Protocol</th>
+                    <th class="px-6 py-4">IP Address</th>
+                    <th class="px-6 py-4">Action</th>
+                    <th class="px-6 py-4">Reason</th>
+                    <th class="px-6 py-4">Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-dark-border">
+                  <tr v-for="log in firewallActivity" :key="log.id" class="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors">
+                    <td class="px-6 py-4 text-center">
+                       <span class="text-[9px] font-black bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500">TCP</span>
+                    </td>
+                    <td class="px-6 py-4 font-mono text-xs font-bold">{{ log.ip }}</td>
+                    <td class="px-6 py-4">
+                      <span :class="log.action === 'Blocked' ? 'text-red-500 bg-red-500/10' : 'text-green-500 bg-green-500/10'" class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter">
+                        {{ log.action }}
+                      </span>
+                    </td>
+                    <td class="px-6 py-4">
+                      <p class="text-xs font-bold text-slate-700 dark:text-slate-300">{{ log.reason }}</p>
+                      <p class="text-[9px] text-slate-400">Target: {{ log.target }}</p>
+                    </td>
+                    <td class="px-6 py-4 text-xs text-slate-400 italic font-medium">{{ log.time }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
