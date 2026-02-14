@@ -2,6 +2,8 @@
 package main
 
 import (
+	"io"
+	"encoding/json"
 	"io/fs"
 	"net/http"
 	"log"
@@ -11,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/acmavirus/foxdocker-panel"
 	"github.com/acmavirus/foxdocker-panel/internal/security"
+	"github.com/acmavirus/foxdocker-panel/internal/system"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/disk"
@@ -200,6 +203,41 @@ func main() {
 				"status": "success",
 				"message": "Security scan completed. All systems operational.",
 				"timestamp": time.Now().Format(time.RFC3339),
+			})
+		})
+
+		// System Logs Endpoints
+		api.GET("/system/logs", func(c *gin.Context) {
+			logType := c.DefaultQuery("type", "syslog")
+			lines, _ := system.GetSystemLogs(logType, 50)
+			c.JSON(http.StatusOK, gin.H{
+				"type":  logType,
+				"logs":  lines,
+				"count": len(lines),
+			})
+		})
+
+		api.GET("/system/logs/stream", func(c *gin.Context) {
+			logType := c.DefaultQuery("type", "syslog")
+			
+			c.Header("Content-Type", "text/event-stream")
+			c.Header("Cache-Control", "no-cache")
+			c.Header("Connection", "keep-alive")
+			c.Header("Transfer-Encoding", "chunked")
+
+			ticker := time.NewTicker(2 * time.Second)
+			defer ticker.Stop()
+
+			c.Stream(func(w io.Writer) bool {
+				select {
+				case <-c.Request.Context().Done():
+					return false
+				case <-ticker.C:
+					lines, _ := system.GetSystemLogs(logType, 5)
+					data, _ := json.Marshal(lines)
+					c.SSEvent("message", string(data))
+					return true
+				}
 			})
 		})
 	}

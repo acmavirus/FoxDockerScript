@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Copyright by AcmaTvirus
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import axios from 'axios'
 import appsData from './apps.json' // Import templates
 import { 
@@ -27,7 +27,10 @@ import {
   History,
   Timer,
   Network,
-  Download
+  Download,
+  Trash2,
+  Type,
+  Maximize
 } from 'lucide-vue-next'
 
 const currentTab = ref('dashboard')
@@ -104,6 +107,84 @@ const runSecurityScan = async () => {
     scanning.value = false
   }
 }
+
+// System Logs Logic
+const systemLogs = ref<string[]>([])
+const selectedLogType = ref('syslog')
+const logSource = ref<EventSource | null>(null)
+
+const startLogStream = () => {
+  if (logSource.value) {
+    logSource.value.close()
+  }
+  
+  // Initial fetch for immediate display
+  axios.get(`/api/system/logs?type=${selectedLogType.value}`).then(res => {
+    systemLogs.value = res.data.logs
+    scrollToBottom()
+  })
+
+  // Start live stream
+  logSource.value = new EventSource(`/api/system/logs/stream?type=${selectedLogType.value}`)
+  logSource.value.onmessage = (event) => {
+    try {
+      const newLines = JSON.parse(event.data)
+      if (newLines && newLines.length > 0) {
+        // Append unique lines and keep last 500
+        const currentLogs = [...systemLogs.value]
+        newLines.forEach((line: string) => {
+          if (!currentLogs.includes(line)) {
+            currentLogs.push(line)
+          }
+        })
+        systemLogs.value = currentLogs.slice(-500)
+        scrollToBottom()
+      }
+    } catch (e) {
+      console.error('Error parsing log event:', e)
+    }
+  }
+  
+  logSource.value.onerror = () => {
+    console.error('Log stream disconnected')
+    if (logSource.value) logSource.value.close()
+  }
+}
+
+const scrollToBottom = () => {
+  nextTick(() => {
+    const el = document.getElementById('log-container')
+    if (el) el.scrollTop = el.scrollHeight
+  })
+}
+
+watch(selectedLogType, () => {
+  if (currentTab.value === 'logs') {
+    startLogStream()
+  }
+})
+
+watch(currentTab, (newTab) => {
+  if (newTab === 'logs') {
+    startLogStream()
+  } else if (logSource.value) {
+    logSource.value.close()
+    logSource.value = null
+  }
+})
+
+// Dashboard Customization
+const dashboardSettings = ref({
+  fontFamily: localStorage.getItem('fox_font_family') || 'Outfit, sans-serif',
+  fontSize: localStorage.getItem('fox_font_size') || '14px'
+})
+
+const applySettings = () => {
+  localStorage.setItem('fox_font_family', dashboardSettings.value.fontFamily)
+  localStorage.setItem('fox_font_size', dashboardSettings.value.fontSize)
+}
+
+watch(dashboardSettings, applySettings, { deep: true })
 
 let statsInterval: any = null
 let securityInterval: any = null
@@ -182,7 +263,7 @@ const installApp = (app: any) => {
 </script>
 
 <template>
-  <div class="flex h-screen bg-slate-50 dark:bg-dark-bg text-slate-900 dark:text-slate-100 font-sans">
+  <div class="flex h-screen bg-slate-50 dark:bg-dark-bg text-slate-900 dark:text-slate-100" :style="{ fontFamily: dashboardSettings.fontFamily, fontSize: dashboardSettings.fontSize }">
     <!-- Sidebar -->
     <aside class="w-72 bg-white dark:bg-dark-card border-r border-slate-200 dark:border-dark-border p-6 flex flex-col overflow-y-auto custom-scrollbar">
       <div class="flex items-center justify-between mb-8 px-2">
@@ -819,6 +900,130 @@ const installApp = (app: any) => {
                 <span>Install</span>
               </button>
             </div>
+          </div>
+        </div>
+
+        <!-- System Logs View -->
+        <div v-else-if="currentTab === 'logs'" class="max-w-6xl mx-auto space-y-6 animate-in slide-in-from-right-10 duration-500 h-[calc(100vh-180px)] flex flex-col">
+          <div class="flex items-center justify-between shrink-0">
+            <div>
+              <h2 class="text-3xl font-black tracking-tight flex items-center space-x-3">
+                <ScrollText class="w-10 h-10 text-fox-500" />
+                <span>System Logs</span>
+              </h2>
+              <p class="text-slate-500 mt-1 font-medium">Theo dõi nhật ký hệ thống thời gian thực.</p>
+            </div>
+            <div class="flex items-center space-x-3">
+              <select v-model="selectedLogType" class="bg-slate-100 dark:bg-slate-800 border-none rounded-xl py-2 px-4 text-xs font-bold outline-none focus:ring-2 focus:ring-fox-500">
+                <option value="syslog">System Log (/var/log/syslog)</option>
+                <option value="auth">Auth Log (/var/log/auth.log)</option>
+                <option value="foxdocker">FoxDocker Admin Log</option>
+                <option value="docker">Docker Events</option>
+              </select>
+              <button @click="systemLogs = []" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl hover:text-red-500 transition-colors">
+                <Trash2 class="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div id="log-container" class="flex-1 bg-slate-900 border border-slate-800 rounded-2xl overflow-y-auto p-6 font-mono text-xs leading-relaxed custom-scrollbar shadow-2xl">
+            <div v-if="systemLogs.length === 0" class="flex flex-col items-center justify-center h-full text-slate-600 space-y-4">
+              <div class="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center animate-pulse">
+                <Activity class="w-6 h-6" />
+              </div>
+              <p class="font-black uppercase tracking-widest text-[10px]">Đang đợi nhật ký mới...</p>
+            </div>
+            <div v-for="(line, idx) in systemLogs" :key="idx" class="group flex items-start space-x-4 mb-1 hover:bg-white/5 p-1 rounded transition-colors">
+              <span class="text-slate-600 select-none w-8 text-right shrink-0">{{ idx + 1 }}</span>
+              <pre class="whitespace-pre-wrap break-all text-slate-300 group-hover:text-white">{{ line }}</pre>
+            </div>
+          </div>
+          
+          <div class="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-dark-border">
+             <div class="flex items-center space-x-2">
+                <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]"></div>
+                <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Live Streaming Active</span>
+             </div>
+             <div class="text-[10px] font-bold text-slate-400">Showing last {{ systemLogs.length }} lines</div>
+          </div>
+        </div>
+
+        <!-- Settings View -->
+        <div v-else-if="currentTab === 'settings'" class="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-right-10 duration-500">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-3xl font-black tracking-tight flex items-center space-x-3">
+                <Settings class="w-10 h-10 text-slate-400" />
+                <span>Panel Settings</span>
+              </h2>
+              <p class="text-slate-500 mt-1 font-medium">Tùy chỉnh giao diện và cấu hình hệ thống.</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+             <!-- Appearance Card -->
+             <div class="glass-card p-6 border-l-4 border-fox-500">
+                <h3 class="font-black text-xs uppercase tracking-widest mb-6 flex items-center space-x-2">
+                   <Type class="w-4 h-4 text-fox-500" />
+                   <span>Dashboard Appearance</span>
+                </h3>
+                
+                <div class="space-y-6">
+                   <!-- Font Family -->
+                   <div class="space-y-2">
+                      <label class="text-[10px] font-black uppercase tracking-widest text-slate-400">Font Family</label>
+                      <select v-model="dashboardSettings.fontFamily" class="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-xl py-3 px-4 text-xs font-bold outline-none focus:ring-2 focus:ring-fox-500">
+                         <option value="'Outfit', sans-serif">Outfit (Default)</option>
+                         <option value="'Inter', sans-serif">Inter</option>
+                         <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+                         <option value="'Roboto', sans-serif">Roboto</option>
+                         <option value="'Lexend', sans-serif">Lexend</option>
+                      </select>
+                   </div>
+
+                   <!-- Font Size -->
+                   <div class="space-y-2">
+                      <div class="flex justify-between items-center">
+                         <label class="text-[10px] font-black uppercase tracking-widest text-slate-400">Font Size</label>
+                         <span class="text-xs font-black text-fox-500">{{ dashboardSettings.fontSize }}</span>
+                      </div>
+                      <div class="flex items-center space-x-4">
+                         <input type="range" min="12" max="20" step="1" 
+                                :value="parseInt(dashboardSettings.fontSize)" 
+                                @input="(e: any) => dashboardSettings.fontSize = e.target.value + 'px'"
+                                class="flex-1 accent-fox-500">
+                         <div class="flex items-center space-x-1">
+                            <span class="text-[10px] text-slate-400">A</span>
+                            <Maximize class="w-4 h-4 text-slate-300" />
+                            <span class="text-lg text-slate-400">A</span>
+                         </div>
+                      </div>
+                   </div>
+
+                   <p class="text-[10px] text-slate-400 italic leading-relaxed">
+                      * Cài đặt này sẽ được lưu cục bộ trên trình duyệt của bạn (LocalStorage).
+                   </p>
+                </div>
+             </div>
+
+             <!-- System Info Card -->
+             <div class="glass-card p-6">
+                <h3 class="font-black text-xs uppercase tracking-widest mb-6">Build Information</h3>
+                <div class="space-y-4">
+                   <div class="flex justify-between p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-dark-border">
+                      <span class="text-xs font-bold text-slate-500">Version</span>
+                      <span class="text-xs font-black">v1.2.5-stable</span>
+                   </div>
+                   <div class="flex justify-between p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-dark-border">
+                      <span class="text-xs font-bold text-slate-500">Branch</span>
+                      <span class="text-xs font-black">master</span>
+                   </div>
+                   <div class="flex justify-between p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-dark-border">
+                      <span class="text-xs font-bold text-slate-500">Environment</span>
+                      <span class="text-xs font-black text-green-500 uppercase">Production</span>
+                   </div>
+                </div>
+             </div>
           </div>
         </div>
 
