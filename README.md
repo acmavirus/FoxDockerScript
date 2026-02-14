@@ -33,11 +33,11 @@ Sau khi cài đặt, bạn có thể quản lý Panel thông qua các lệnh Doc
 # Xem logs
 docker logs -f fox-admin
 
-# Cập nhật bản mới
+# Cập nhật bản mới (tự động nhận diện lệnh compose)
 bash /opt/foxdocker/scripts/update.sh
 
-# Restart hệ thống
-cd /opt/foxdocker && docker compose restart
+# Restart hệ thống (sử dụng lệnh phù hợp với VPS của bạn)
+cd /opt/foxdocker && (docker compose restart || docker-compose restart)
 ```
 
 ---

@@ -83,7 +83,12 @@ fi
 
 # 4. Tạo thư mục hệ thống
 echo "Khởi tạo thư mục hệ thống tại /opt/foxdocker..."
-mkdir -p /opt/foxdocker/data /opt/foxdocker/projects /opt/foxdocker/letsencrypt
+mkdir -p /opt/foxdocker/data /opt/foxdocker/projects /opt/foxdocker/letsencrypt /opt/foxdocker/scripts
+
+# 4.1 Tải script cập nhật
+echo "Đang tải script cập nhật..."
+curl -sSL https://raw.githubusercontent.com/acmavirus/FoxDockerScript/main/scripts/update.sh -o /opt/foxdocker/scripts/update.sh
+chmod +x /opt/foxdocker/scripts/update.sh
 
 # 5. Tạo file cấu hình docker-compose.yml
 echo "Đang tạo cấu hình Docker Compose..."

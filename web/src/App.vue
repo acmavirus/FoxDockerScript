@@ -158,11 +158,6 @@ const recentProjects = [
   { name: 'blog-dev', status: 'offline', type: 'PHP 8.2' },
 ]
 
-const vulnerabilities = [
-  { id: 1, target: 'nginx:latest', severity: 'High', desc: 'CVE-2023-XXXX', status: 'pending' },
-  { id: 2, target: 'wordpress:latest', severity: 'Medium', desc: 'Outdated Plugin', status: 'scanned' },
-]
-
 const securityStats = ref({
   score: 0,
   firewallRules: 0,
@@ -182,14 +177,6 @@ const topAttackingIps = ref([
 const firewallActivity = ref<any[]>([])
 const firewallConfig = ref({ enabled: true, ports: [] as string[] })
 const auditLogs = ref<any[]>([])
-
-const securityFeatures = [
-  { id: 'firewall', name: 'Port Firewall', desc: 'Manage iptables/ufw ports', status: 'Active', icon: ShieldCheck, color: 'text-blue-500' },
-  { id: 'fail2ban', name: 'Fail2Ban', desc: 'Auto-block brute force', status: 'Running', icon: Activity, color: 'text-red-500' },
-  { id: 'ssl', name: 'SSL Monitoring', desc: 'Traefik ACME Status', status: 'Healthy', icon: Globe, color: 'text-green-500' },
-  { id: 'waf', name: 'WAF (ModSec)', desc: 'SQLi & XSS Protection', status: 'Active', icon: ShieldCheck, color: 'text-purple-500' },
-  { id: 'isolation', name: 'Isolation', desc: 'Container Network Segregation', status: 'Active', icon: Box, color: 'text-orange-500' }
-]
 
 // App Store Logic
 const installApp = (app: any) => {
@@ -463,11 +450,15 @@ const installApp = (app: any) => {
             </button>
           </div>
 
-          <!-- Security Stats Grid -->
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div class="glass-card p-4 flex flex-col items-center justify-center border-t-4 border-fox-500">
-              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Security Score</span>
-              {{ tab }}
+          <div class="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800/50 p-1 rounded-2xl w-fit">
+            <button 
+              v-for="subTab in ['overview', 'firewall', 'fail2ban', 'isolation', 'iam']" 
+              :key="subTab"
+              @click="securitySubTab = subTab"
+              class="px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+              :class="securitySubTab === subTab ? 'bg-white dark:bg-dark-card shadow-sm text-fox-500' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'"
+            >
+              {{ subTab }}
             </button>
           </div>
 
