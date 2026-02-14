@@ -972,13 +972,31 @@ const installApp = (app: any) => {
                    <!-- Font Family -->
                    <div class="space-y-2">
                       <label class="text-[10px] font-black uppercase tracking-widest text-slate-400">Font Family</label>
-                      <select v-model="dashboardSettings.fontFamily" class="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-xl py-3 px-4 text-xs font-bold outline-none focus:ring-2 focus:ring-fox-500">
-                         <option value="'Outfit', sans-serif">Outfit (Default)</option>
-                         <option value="'Inter', sans-serif">Inter</option>
-                         <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
-                         <option value="'Roboto', sans-serif">Roboto</option>
-                         <option value="'Lexend', sans-serif">Lexend</option>
-                      </select>
+                       <select v-model="dashboardSettings.fontFamily" class="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-xl py-3 px-4 text-xs font-bold outline-none focus:ring-2 focus:ring-fox-500">
+                         <optgroup label="Modern & Premium">
+                           <option value="'Outfit', sans-serif">Outfit (Default)</option>
+                           <option value="'Inter', sans-serif">Inter</option>
+                           <option value="'Be Vietnam Pro', sans-serif">Be Vietnam Pro</option>
+                           <option value="'Lexend', sans-serif">Lexend</option>
+                           <option value="'Poppins', sans-serif">Poppins</option>
+                         </optgroup>
+                         <optgroup label="Geometric & Clean">
+                           <option value="'Montserrat', sans-serif">Montserrat</option>
+                           <option value="'Kanit', sans-serif">Kanit</option>
+                           <option value="'Quicksand', sans-serif">Quicksand</option>
+                           <option value="'Raleway', sans-serif">Raleway</option>
+                         </optgroup>
+                         <optgroup label="Classic Standards">
+                           <option value="'Open Sans', sans-serif">Open Sans</option>
+                           <option value="'Roboto', sans-serif">Roboto</option>
+                           <option value="'Lato', sans-serif">Lato</option>
+                           <option value="'Nunito', sans-serif">Nunito</option>
+                           <option value="'Ubuntu', sans-serif">Ubuntu</option>
+                         </optgroup>
+                         <optgroup label="Monospace">
+                           <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+                         </optgroup>
+                       </select>
                    </div>
 
                    <!-- Font Size -->

@@ -117,12 +117,22 @@ func getAttackTrend() []AttackTrend {
 }
 
 func main() {
+	// Initialize logging to file
+	os.MkdirAll("data", 0755)
+	logFile, err := os.OpenFile("data/foxdocker.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err == nil {
+		mw := io.MultiWriter(os.Stdout, logFile)
+		log.SetOutput(mw)
+		gin.DefaultWriter = mw
+	}
+
 	// Initialize Security
 	if err := security.Init(); err != nil {
 		log.Printf("Warning: Failed to init security: %v", err)
 	}
 
 	r := gin.Default()
+
 
 	// API Routes
 	api := r.Group("/api")

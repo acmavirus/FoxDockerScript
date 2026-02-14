@@ -19,24 +19,31 @@ func GetSystemLogs(logType string, lines int) ([]string, error) {
 
 	switch logType {
 	case "syslog":
-		cmd = exec.Command("tail", "-n", fmt.Sprintf("%d", lines), "/var/log/syslog")
+		filePath := "/var/log/syslog"
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			filePath = "/var/log/messages" // Fallback for CentOS/RHEL
+		}
+		cmd = exec.Command("tail", "-n", fmt.Sprintf("%d", lines), filePath)
 	case "auth":
-		cmd = exec.Command("tail", "-n", fmt.Sprintf("%d", lines), "/var/log/auth.log")
+		filePath := "/var/log/auth.log"
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			filePath = "/var/log/secure" // Fallback for CentOS/RHEL
+		}
+		cmd = exec.Command("tail", "-n", fmt.Sprintf("%d", lines), filePath)
 	case "foxdocker":
 		cmd = exec.Command("tail", "-n", fmt.Sprintf("%d", lines), "data/foxdocker.log")
 	case "docker":
-		// Get last 50 docker events
-		cmd = exec.Command("docker", "events", "--since", "1h", "--until", "0s")
-		// Note: docker events is blocking, tailing is better for specific containers.
-		// For general events, we'll just take a snapshot
+		// Snapshot of recent events to avoid blocking SSE
+		cmd = exec.Command("docker", "events", "--since", "5m", "--until", "0s")
 	default:
 		return nil, fmt.Errorf("unknown log type: %s", logType)
 	}
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return []string{fmt.Sprintf("Logs not available: %v", err)}, nil
+		return []string{fmt.Sprintf("Logs not accessible: %v. Please ensure /var/log is mounted and the file exists.", err)}, nil
 	}
+
 
 	content := string(output)
 	if content == "" {

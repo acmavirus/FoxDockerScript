@@ -121,6 +121,7 @@ services:
       - "/var/run/docker.sock:/var/run/docker.sock"
       - "/opt/foxdocker/data:/app/data"
       - "/opt/foxdocker/projects:/projects"
+      - "/var/log:/var/log:ro"
     environment:
       - JWT_SECRET=$(openssl rand -hex 32)
     labels:
