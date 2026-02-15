@@ -68,9 +68,7 @@ const handleLogin = async () => {
     localStorage.setItem('fox_token', response.data.token)
     isAuthenticated.value = true
     showToast('Login successful', 'success')
-    // Refresh data after login
-    fetchStats()
-    fetchProjects()
+    initDashboard() // Trigger full init
   } catch (error: any) {
     showToast(error.response?.data?.error || 'Login failed', 'error')
   } finally {
@@ -81,6 +79,7 @@ const handleLogin = async () => {
 const handleLogout = () => {
   localStorage.removeItem('fox_token')
   isAuthenticated.value = false
+  stopIntervals() // Clean up
   showToast('Logged out successfully', 'info')
 }
 
@@ -128,8 +127,10 @@ const fetchSecurityData = async () => {
     firewallActivity.value = firewallRes.data
     firewallConfig.value = configRes.data
     auditLogs.value = auditRes.data
-  } catch (error) {
-    console.error('Failed to fetch security data:', error)
+  } catch (error: any) {
+    if (error.response?.status !== 401) {
+      console.error('Failed to fetch security data:', error)
+    }
   }
 }
 
@@ -239,10 +240,35 @@ let statsInterval: any = null
 let securityInterval: any = null
 let metricsInterval: any = null
 
-onUnmounted(() => {
+const stopIntervals = () => {
   if (statsInterval) clearInterval(statsInterval)
   if (securityInterval) clearInterval(securityInterval)
   if (metricsInterval) clearInterval(metricsInterval)
+  statsInterval = null
+  securityInterval = null
+  metricsInterval = null
+}
+
+const startIntervals = () => {
+  stopIntervals() // Prevent double intervals
+  statsInterval = setInterval(fetchStats, 3000)
+  metricsInterval = setInterval(fetchContainerStats, 3000) // Match UI feel
+  securityInterval = setInterval(fetchSecurityData, 10000)
+}
+
+const initDashboard = () => {
+  if (!isAuthenticated.value) return
+  fetchStats()
+  fetchSecurityData()
+  fetchProjects()
+  fetchDatabases()
+  fetchDomains()
+  fetchNotificationSettings()
+  startIntervals()
+}
+
+onUnmounted(() => {
+  stopIntervals()
 })
 
 // Sidebar menu groups
@@ -543,15 +569,9 @@ const scanImage = async (imageName: string) => {
 }
 
 onMounted(() => {
-  fetchStats()
-  fetchSecurityData()
-  fetchProjects()
-  fetchDatabases()
-  fetchDomains()
-  fetchNotificationSettings()
-  statsInterval = setInterval(fetchStats, 3000)
-  metricsInterval = setInterval(fetchContainerStats, 5000)
-  securityInterval = setInterval(fetchSecurityData, 10000)
+  if (isAuthenticated.value) {
+    initDashboard()
+  }
 })
 
 
