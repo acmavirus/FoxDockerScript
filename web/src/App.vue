@@ -189,13 +189,6 @@ watch(dashboardSettings, applySettings, { deep: true })
 let statsInterval: any = null
 let securityInterval: any = null
 
-onMounted(() => {
-  fetchStats()
-  fetchSecurityData()
-  statsInterval = setInterval(fetchStats, 3000)
-  securityInterval = setInterval(fetchSecurityData, 10000)
-})
-
 onUnmounted(() => {
   if (statsInterval) clearInterval(statsInterval)
   if (securityInterval) clearInterval(securityInterval)
@@ -234,12 +227,6 @@ const sidebarGroups: SidebarGroup[] = [
   }
 ]
 
-const recentProjects = [
-  { name: 'mysite.com', status: 'online', type: 'WordPress' },
-  { name: 'api-service', status: 'online', type: 'Node.js' },
-  { name: 'blog-dev', status: 'offline', type: 'PHP 8.2' },
-]
-
 const securityStats = ref({
   score: 0,
   firewallRules: 0,
@@ -251,15 +238,205 @@ const securityStats = ref({
 })
 
 const topAttackingIps = ref<any[]>([])
-
 const firewallActivity = ref<any[]>([])
 const firewallConfig = ref({ enabled: true, ports: [] as string[] })
 const auditLogs = ref<any[]>([])
 
 // App Store Logic
-const installApp = (app: any) => {
-  alert(`Đang cài đặt ${app.name}...\n(Tính năng backend đang được phát triển)`)
+const installApp = async (app: any) => {
+  const confirmInstall = confirm(`Bạn có muốn cài đặt ${app.name}?`)
+  if (!confirmInstall) return
+
+  try {
+    const response = await axios.post('/api/apps/install', {
+      app: {
+        id: app.id,
+        name: app.name,
+        image: app.image,
+        ports: app.ports,
+        env: app.env
+      },
+      envVars: {} // In the future, we can add a form to collect these
+    })
+    alert(response.data.message)
+    currentTab.value = 'projects'
+    fetchProjects()
+  } catch (error) {
+    console.error('Failed to install app:', error)
+    alert('Failed to trigger installation')
+  }
 }
+
+const projects = ref<any[]>([])
+const fetchProjects = async () => {
+  try {
+    const response = await axios.get('/api/projects')
+    projects.value = response.data
+  } catch (error) {
+    console.error('Failed to fetch projects:', error)
+  }
+}
+
+// Databases Logic
+const databasesList = ref<any[]>([])
+const fetchDatabases = async () => {
+  try {
+    const response = await axios.get('/api/databases')
+    databasesList.value = response.data
+  } catch (error) {
+    console.error('Failed to fetch databases:', error)
+  }
+}
+
+const showAddDb = ref(false)
+const newDb = ref({ type: 'mysql', name: '', password: '' })
+const createDatabase = async () => {
+  try {
+    await axios.post('/api/databases', newDb.value)
+    showAddDb.value = false
+    fetchDatabases()
+  } catch (error) {
+    alert('Failed to create database')
+  }
+}
+
+// Files Logic
+const currentFilePath = ref('')
+const filesList = ref<any[]>([])
+const fetchFiles = async (path: string = '') => {
+  try {
+    currentFilePath.value = path
+    const response = await axios.get(`/api/files?path=${path}`)
+    filesList.value = response.data
+  } catch (error) {
+    console.error('Failed to fetch files:', error)
+  }
+}
+
+const fileContent = ref('')
+const selectedFile = ref('')
+const openFile = async (path: string) => {
+  try {
+    selectedFile.value = path
+    const response = await axios.get(`/api/files/content?path=${path}`)
+    fileContent.value = response.data.content
+  } catch (error) {
+    alert('Failed to read file')
+  }
+}
+
+const saveFile = async () => {
+  try {
+    await axios.post('/api/files/save', { path: selectedFile.value, content: fileContent.value })
+    alert('File saved successfully')
+    selectedFile.value = ''
+  } catch (error) {
+    alert('Failed to save file')
+  }
+}
+
+// Domains Logic
+const domainsList = ref<any[]>([])
+const fetchDomains = async () => {
+  try {
+    const response = await axios.get('/api/domains')
+    domainsList.value = response.data
+  } catch (error) {
+    console.error('Failed to fetch domains:', error)
+  }
+}
+
+// Terminal Logic
+const terminalCommand = ref('')
+const terminalOutput = ref('')
+const terminalContainer = ref('') // Should be selectable in real app
+const executeTerminal = async () => {
+  try {
+    const response = await axios.post('/api/terminal/exec', {
+      containerId: terminalContainer.value || 'fox-admin',
+      command: terminalCommand.value
+    })
+    terminalOutput.value += `\n# ${terminalCommand.value}\n${response.data.output}`
+    terminalCommand.value = ''
+    nextTick(() => {
+      const el = document.getElementById('terminal-view')
+      if (el) el.scrollTop = el.scrollHeight
+    })
+  } catch (error: any) {
+    terminalOutput.value += `\n# Error: ${error.response?.data?.error || error.message}`
+  }
+}
+
+// Backup Logic
+const backupInProgress = ref(false)
+const createBackup = async (projectId: string) => {
+  backupInProgress.value = true
+  try {
+    const response = await axios.post('/api/backups/create', { projectId })
+    alert(`Backup created: ${response.data.path}`)
+  } catch (error) {
+    alert('Failed to create backup')
+  } finally {
+    backupInProgress.value = false
+  }
+}
+
+// Cron Logic
+const cronJobs = ref<any[]>([])
+const fetchCronJobs = async () => {
+  try {
+    const response = await axios.get('/api/cron')
+    cronJobs.value = response.data
+  } catch (error) {
+    console.error('Failed to fetch cron jobs:', error)
+  }
+}
+
+const addCronJob = () => {
+  cronJobs.value.push({
+    id: Math.random().toString(36).substr(2, 9),
+    name: 'New Task',
+    schedule: '0 0 * * *',
+    command: 'echo "hello"',
+    status: 'enabled'
+  })
+}
+
+const saveCronJobs = async () => {
+  try {
+    await axios.post('/api/cron', cronJobs.value)
+    alert('Cron jobs saved successfully')
+  } catch (error) {
+    alert('Failed to save cron jobs')
+  }
+}
+
+onMounted(() => {
+  fetchStats()
+  fetchSecurityData()
+  fetchProjects()
+  fetchDatabases()
+  fetchDomains()
+  statsInterval = setInterval(fetchStats, 3000)
+  securityInterval = setInterval(fetchSecurityData, 10000)
+})
+
+watch(currentTab, (newTab) => {
+  if (newTab === 'logs') {
+    startLogStream()
+  } else if (newTab === 'databases') {
+    fetchDatabases()
+  } else if (newTab === 'files') {
+    fetchFiles()
+  } else if (newTab === 'domains') {
+    fetchDomains()
+  } else if (newTab === 'cron') {
+    fetchCronJobs()
+  } else if (logSource.value) {
+    logSource.value.close()
+    logSource.value = null
+  }
+})
 </script>
 
 <template>
@@ -482,7 +659,7 @@ const installApp = (app: any) => {
               <button class="text-fox-500 text-[10px] font-black uppercase tracking-widest hover:underline">View Infrastructure</button>
             </div>
             <div class="divide-y divide-slate-200 dark:divide-dark-border">
-              <div v-for="project in recentProjects" :key="project.name" class="p-6 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors cursor-pointer group">
+              <div v-for="project in projects" :key="project.name" class="p-6 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors cursor-pointer group">
                 <div class="flex items-center space-x-4">
                   <div class="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center transition-colors group-hover:bg-fox-500/10">
                     <Globe class="w-6 h-6 text-slate-400 group-hover:text-fox-500 transition-colors" />
@@ -1041,6 +1218,288 @@ const installApp = (app: any) => {
                       <span class="text-xs font-black text-green-500 uppercase">Production</span>
                    </div>
                 </div>
+             </div>
+          </div>
+        </div>
+
+        <!-- Databases View -->
+        <div v-else-if="currentTab === 'databases'" class="max-w-6xl mx-auto space-y-8 animate-in slide-in-from-right-10 duration-500">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-3xl font-black tracking-tight flex items-center space-x-3">
+                <Database class="w-10 h-10 text-fox-500" />
+                <span>Databases</span>
+              </h2>
+              <p class="text-slate-500 mt-1 font-medium">Quản lý cơ sở dữ liệu Docker của bạn.</p>
+            </div>
+            <button @click="showAddDb = true" class="button-primary flex items-center space-x-2">
+              <Plus class="w-4 h-4" />
+              <span>New Database</span>
+            </button>
+          </div>
+
+          <!-- Add DB Modal Placeholder -->
+          <div v-if="showAddDb" class="glass-card p-6 border-2 border-fox-500/20 space-y-4">
+            <h3 class="font-black text-lg">Create New Instance</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <select v-model="newDb.type" class="bg-slate-100 dark:bg-slate-800 rounded-xl px-4 py-3 border-none outline-none font-bold text-xs">
+                <option value="mysql">MySQL 8.0</option>
+                <option value="postgres">Postgre 15</option>
+                <option value="redis">Redis 7.0</option>
+                <option value="mongodb">MongoDB 6.0</option>
+              </select>
+              <input v-model="newDb.name" placeholder="Database Name" class="bg-slate-100 dark:bg-slate-800 rounded-xl px-4 py-3 border-none outline-none font-bold text-xs" />
+              <input v-model="newDb.password" type="password" placeholder="Root Password" class="bg-slate-100 dark:bg-slate-800 rounded-xl px-4 py-3 border-none outline-none font-bold text-xs" />
+            </div>
+            <div class="flex justify-end space-x-2">
+              <button @click="showAddDb = false" class="px-6 py-2 rounded-xl font-bold text-xs uppercase tracking-widest text-slate-500">Cancel</button>
+              <button @click="createDatabase" class="px-6 py-2 bg-fox-500 text-white rounded-xl font-bold text-xs uppercase tracking-widest">Deploy Instance</button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div v-for="db in databasesList" :key="db.id" class="glass-card p-6 flex items-center justify-between group hover:border-fox-500/50 transition-all">
+              <div class="flex items-center space-x-4">
+                <div class="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center">
+                  <Database class="w-6 h-6 text-slate-400 group-hover:text-fox-500" />
+                </div>
+                <div>
+                  <h4 class="font-black text-sm uppercase">{{ db.name }}</h4>
+                  <p class="text-[10px] text-slate-500 font-mono">{{ db.type }} • {{ db.status }}</p>
+                </div>
+              </div>
+              <div class="text-right">
+                <p class="text-[10px] font-black text-fox-500">{{ db.port }}</p>
+                <button class="p-1.5 text-slate-400 hover:text-red-500 transition-colors">
+                  <Trash2 class="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Files View -->
+        <div v-else-if="currentTab === 'files'" class="max-w-6xl mx-auto space-y-6 animate-in slide-in-from-right-10 duration-500 flex flex-col h-[calc(100vh-180px)]">
+          <div class="flex items-center justify-between shrink-0">
+            <div>
+              <h2 class="text-3xl font-black tracking-tight flex items-center space-x-3">
+                <FolderOpen class="w-10 h-10 text-fox-500" />
+                <span>File Manager</span>
+              </h2>
+              <p class="text-slate-500 mt-1 font-medium italic">/opt/foxdocker/apps/{{ currentFilePath }}</p>
+            </div>
+            <button @click="fetchFiles('')" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl hover:text-fox-500 transition-colors">
+              <Activity class="w-4 h-4" />
+            </button>
+          </div>
+
+          <div class="flex-1 glass-card overflow-hidden flex flex-col">
+            <div class="p-4 border-b border-slate-200 dark:border-dark-border flex items-center space-x-2 bg-slate-50/50 dark:bg-slate-800/30 overflow-x-auto no-scrollbar">
+              <button @click="fetchFiles('')" class="text-[10px] font-black uppercase text-fox-500 hover:underline">Root</button>
+              <template v-for="(part, idx) in currentFilePath.split('/')" :key="idx">
+                <span v-if="part" class="text-slate-300">/</span>
+                <button v-if="part" @click="fetchFiles(currentFilePath.split('/').slice(0, idx+1).join('/'))" class="text-[10px] font-black uppercase text-slate-500 hover:text-fox-500">{{ part }}</button>
+              </template>
+            </div>
+            
+            <div v-if="selectedFile" class="flex-1 flex flex-col">
+              <div class="p-4 border-b border-slate-200 dark:border-dark-border flex justify-between items-center px-6">
+                <span class="text-xs font-mono font-bold">{{ selectedFile }}</span>
+                <div class="space-x-2">
+                  <button @click="selectedFile = ''" class="px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-500 border border-slate-200 dark:border-dark-border">Close</button>
+                  <button @click="saveFile" class="px-4 py-1.5 bg-fox-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-fox-500/20">Save Changes</button>
+                </div>
+              </div>
+              <textarea v-model="fileContent" class="flex-1 bg-slate-900 text-slate-300 p-8 font-mono text-xs outline-none focus:ring-0 resize-none"></textarea>
+            </div>
+
+            <div v-else class="flex-1 overflow-y-auto">
+              <table class="w-full text-left">
+                <thead class="bg-slate-50/50 dark:bg-slate-800/30">
+                  <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200 dark:border-dark-border">
+                    <th class="px-6 py-4">Name</th>
+                    <th class="px-6 py-4">Size</th>
+                    <th class="px-6 py-4">Modified</th>
+                    <th class="px-6 py-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-dark-border">
+                  <tr v-for="file in filesList" :key="file.name" class="hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors cursor-pointer" @dblclick="file.is_dir ? fetchFiles(file.path) : openFile(file.path)">
+                    <td class="px-6 py-4">
+                      <div class="flex items-center space-x-3">
+                        <FolderOpen v-if="file.is_dir" class="w-4 h-4 text-amber-500" />
+                        <ScrollText v-else class="w-4 h-4 text-blue-500" />
+                        <span class="text-xs font-bold">{{ file.name }}</span>
+                      </div>
+                    </td>
+                    <td class="px-6 py-4 text-xs text-slate-500">{{ file.is_dir ? '-' : (file.size / 1024).toFixed(1) + ' KB' }}</td>
+                    <td class="px-6 py-4 text-[10px] text-slate-400 font-mono">{{ file.mod_time }}</td>
+                    <td class="px-6 py-4 text-right space-x-2">
+                       <button v-if="!file.is_dir" @click="openFile(file.path)" class="p-1.5 text-slate-400 hover:text-fox-500"><Terminal class="w-4 h-4" /></button>
+                       <button class="p-1.5 text-slate-400 hover:text-red-500"><Trash2 class="w-4 h-4" /></button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Domains View -->
+        <div v-else-if="currentTab === 'domains'" class="max-w-6xl mx-auto space-y-8 animate-in slide-in-from-right-10 duration-500">
+           <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-3xl font-black tracking-tight flex items-center space-x-3">
+                <Globe class="w-10 h-10 text-fox-500" />
+                <span>Domain Management</span>
+              </h2>
+              <p class="text-slate-500 mt-1 font-medium italic">Quản lý Traefik Ingress & SSL (Let's Encrypt)</p>
+            </div>
+            <button class="button-primary flex items-center space-x-2 bg-blue-500 hover:bg-blue-600 shadow-blue-500/30">
+              <ShieldCheck class="w-4 h-4" />
+              <span>Renew SSL</span>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div v-for="domain in domainsList" :key="domain.domain" class="glass-card p-6 space-y-4 group">
+               <div class="flex justify-between items-start">
+                  <div class="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center">
+                    <Globe class="w-5 h-5 text-slate-400 group-hover:text-fox-500" />
+                  </div>
+                  <span class="text-[9px] font-black uppercase text-green-500 bg-green-500/10 px-2 py-1 rounded-md">{{ domain.status }}</span>
+               </div>
+               <div>
+                  <h4 class="font-black text-lg group-hover:text-fox-500 transition-colors">{{ domain.domain }}</h4>
+                  <p class="text-xs text-slate-500">Proxy Target: <span class="font-bold text-slate-700 dark:text-slate-300">{{ domain.target }}</span></p>
+               </div>
+               <div class="flex items-center space-x-3 pt-4 border-t border-slate-100 dark:border-dark-border">
+                  <div class="flex -space-x-2">
+                     <div class="w-6 h-6 rounded-full bg-blue-500 border-2 border-white dark:border-dark-card flex items-center justify-center text-[8px] text-white font-black" title="SSL Active">SSL</div>
+                     <div class="w-6 h-6 rounded-full bg-fox-500 border-2 border-white dark:border-dark-card flex items-center justify-center text-[8px] text-white font-black" title="Traefik OK">TR</div>
+                  </div>
+                  <span class="text-[10px] text-slate-400 font-bold">Health check passed 2m ago</span>
+               </div>
+            </div>
+            
+            <button class="glass-card p-6 border-dashed border-2 flex flex-col items-center justify-center space-y-3 hover:bg-fox-500/5 transition-colors group">
+              <Plus class="w-8 h-8 text-fox-500 group-hover:rotate-180 transition-transform duration-500" />
+              <span class="text-xs font-black uppercase tracking-widest text-slate-400">Map New Domain</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Terminal View -->
+        <div v-else-if="currentTab === 'terminal'" class="max-w-6xl mx-auto space-y-6 animate-in slide-in-from-right-10 duration-500 h-[calc(100vh-180px)] flex flex-col">
+          <div class="flex items-center justify-between shrink-0">
+            <div>
+              <h2 class="text-3xl font-black tracking-tight flex items-center space-x-3">
+                <Terminal class="w-10 h-10 text-fox-500" />
+                <span>Web Terminal</span>
+              </h2>
+              <p class="text-slate-500 mt-1 font-medium">Truy cập shell của container trực tiếp.</p>
+            </div>
+            <input v-model="terminalContainer" placeholder="Container Name/ID" class="bg-slate-100 dark:bg-slate-800 rounded-xl px-4 py-2 border-none outline-none font-bold text-xs w-48" />
+          </div>
+
+          <div id="terminal-view" class="flex-1 bg-slate-900 border border-slate-800 rounded-2xl overflow-y-auto p-6 font-mono text-xs leading-relaxed custom-scrollbar shadow-2xl text-green-400">
+             <pre class="whitespace-pre-wrap">{{ terminalOutput || 'FoxDocker Terminal Ready...\n# ' }}</pre>
+          </div>
+          
+          <div class="shrink-0 flex items-center space-x-2 bg-slate-100 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200 dark:border-dark-border">
+             <span class="text-xs font-bold text-slate-500 shrink-0">$</span>
+             <input v-model="terminalCommand" @keyup.enter="executeTerminal" placeholder="Type command..." class="flex-1 bg-transparent border-none outline-none font-mono text-xs" />
+          </div>
+        </div>
+
+        <!-- Backup View -->
+        <div v-else-if="currentTab === 'backup'" class="max-w-6xl mx-auto space-y-8 animate-in slide-in-from-right-10 duration-500">
+           <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-3xl font-black tracking-tight flex items-center space-x-3">
+                <History class="w-10 h-10 text-fox-500" />
+                <span>System Backups</span>
+              </h2>
+              <p class="text-slate-500 mt-1 font-medium italic">Sao lưu và phục hồi dữ liệu dự án.</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+             <div class="glass-card p-6 border-l-4 border-fox-500 space-y-4">
+                <h3 class="font-black text-xs uppercase tracking-widest text-slate-400">Instant Snapshot</h3>
+                <p class="text-xs text-slate-500">Create a full archive of all projects in /opt/foxdocker/apps.</p>
+                <button @click="createBackup('all_projects')" :disabled="backupInProgress" class="w-full py-3 bg-fox-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-fox-500/30 disabled:opacity-50">
+                   {{ backupInProgress ? 'Packing data...' : 'Create Full Backup' }}
+                </button>
+             </div>
+             
+             <div class="glass-card p-6">
+                <h3 class="font-black text-xs uppercase tracking-widest text-slate-400 mb-4">Storage Info</h3>
+                <div class="flex items-center space-x-4">
+                   <div class="w-16 h-16 rounded-full border-4 border-fox-500 border-r-transparent animate-spin-slow flex items-center justify-center">
+                      <span class="text-[10px] font-black">2.4GB</span>
+                   </div>
+                   <div class="text-xs space-y-1">
+                      <p class="font-bold">Backup Path:</p>
+                      <p class="font-mono text-slate-400">/opt/foxdocker/backups</p>
+                   </div>
+                </div>
+             </div>
+          </div>
+        </div>
+
+        <!-- Cron Jobs View -->
+        <div v-else-if="currentTab === 'cron'" class="max-w-6xl mx-auto space-y-8 animate-in slide-in-from-right-10 duration-500">
+           <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-3xl font-black tracking-tight flex items-center space-x-3">
+                <Timer class="w-10 h-10 text-fox-500" />
+                <span>Cron Jobs</span>
+              </h2>
+              <p class="text-slate-500 mt-1 font-medium">Lập lịch các tác vụ tự động (Backup, Clean cache...).</p>
+            </div>
+            <div class="space-x-2">
+               <button @click="saveCronJobs" class="px-6 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-xs font-black uppercase tracking-widest shadow-md">Save Changes</button>
+               <button @click="addCronJob" class="button-primary flex items-center space-x-2">
+                 <Plus class="w-4 h-4" />
+                 <span>Add Job</span>
+               </button>
+            </div>
+          </div>
+          
+          <div v-if="cronJobs.length > 0" class="glass-card overflow-hidden divide-y divide-slate-100 dark:divide-dark-border">
+             <div v-for="job in cronJobs" :key="job.id" class="p-6 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
+                <div class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6">
+                   <div class="space-y-1">
+                      <label class="text-[9px] font-black uppercase text-slate-400">Task Name</label>
+                      <input v-model="job.name" class="w-full bg-transparent border-none outline-none font-bold text-sm text-slate-700 dark:text-slate-200" />
+                   </div>
+                   <div class="space-y-1">
+                      <label class="text-[9px] font-black uppercase text-slate-400">Schedule (Cron Expression)</label>
+                      <input v-model="job.schedule" class="w-full bg-transparent border-none outline-none font-mono text-xs text-fox-500" />
+                   </div>
+                   <div class="space-y-1">
+                      <label class="text-[9px] font-black uppercase text-slate-400">Command</label>
+                      <input v-model="job.command" class="w-full bg-transparent border-none outline-none font-mono text-xs text-slate-500" />
+                   </div>
+                </div>
+                <div class="flex items-center space-x-4 ml-8">
+                   <div class="flex items-center space-x-2">
+                      <span class="text-[10px] font-black uppercase" :class="job.status === 'enabled' ? 'text-green-500' : 'text-slate-400'">{{ job.status }}</span>
+                      <div @click="job.status = job.status === 'enabled' ? 'disabled' : 'enabled'" class="w-10 h-5 bg-fox-500 rounded-full flex items-center px-1 shadow-inner cursor-pointer transition-all" :class="{ 'bg-slate-300': job.status !== 'enabled' }">
+                        <div class="w-3.5 h-3.5 bg-white rounded-full shadow-sm transition-transform" :class="{ 'translate-x-4.5': job.status === 'enabled' }"></div>
+                      </div>
+                   </div>
+                   <button @click="cronJobs = cronJobs.filter(j => j.id !== job.id)" class="p-2 text-slate-300 hover:text-red-500 transition-colors"><Trash2 class="w-4 h-4" /></button>
+                </div>
+             </div>
+          </div>
+
+          <div v-else class="glass-card overflow-hidden">
+             <div class="p-12 text-center text-slate-400">
+                <Activity class="w-12 h-12 mx-auto mb-4 opacity-20" />
+                <p class="text-[10px] font-black uppercase tracking-widest mb-4">No scheduled tasks yet</p>
+                <button @click="addCronJob" class="px-6 py-2 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl text-xs font-black uppercase tracking-widest hover:border-fox-500 hover:text-fox-500 transition-all">Create First Job</button>
              </div>
           </div>
         </div>

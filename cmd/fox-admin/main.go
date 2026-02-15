@@ -148,6 +148,183 @@ func main() {
 			c.JSON(http.StatusOK, getSystemStats())
 		})
 
+		// App Store Endpoints
+		api.GET("/apps", func(c *gin.Context) {
+			file, err := os.ReadFile("web/src/apps.json")
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load apps"})
+				return
+			}
+			var apps interface{}
+			json.Unmarshal(file, &apps)
+			c.JSON(http.StatusOK, apps)
+		})
+
+		api.POST("/apps/install", func(c *gin.Context) {
+			var req struct {
+				App     system.App        `json:"app"`
+				EnvVars map[string]string `json:"envVars"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			go func() {
+				err := system.InstallApp(req.App, req.EnvVars)
+				if err != nil {
+					log.Printf("Failed to install app %s: %v", req.App.ID, err)
+				}
+			}()
+
+			c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Installation started"})
+		})
+
+		// Project Endpoints
+		api.GET("/projects", func(c *gin.Context) {
+			// Real logic: find all docker-compose.yml files in /opt/foxdocker/apps
+			projects := []gin.H{}
+			files, _ := os.ReadDir("/opt/foxdocker/apps")
+			for _, f := range files {
+				if f.IsDir() {
+					projects = append(projects, gin.H{
+						"name":   f.Name(),
+						"status": "online", // Needs real docker status check
+						"type":   "Docker",
+					})
+				}
+			}
+			c.JSON(http.StatusOK, projects)
+		})
+
+		// Databases API
+		api.GET("/databases", func(c *gin.Context) {
+			dbs, err := database.ListDatabases()
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, dbs)
+		})
+
+		api.POST("/databases", func(c *gin.Context) {
+			var req struct {
+				Type     string `json:"type"`
+				Name     string `json:"name"`
+				Password string `json:"password"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if err := database.CreateDatabase(req.Type, req.Name, req.Password); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "success"})
+		})
+
+		// Files API
+		api.GET("/files", func(c *gin.Context) {
+			path := c.Query("path")
+			items, err := system.ListFiles(path)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, items)
+		})
+
+		api.GET("/files/content", func(c *gin.Context) {
+			path := c.Query("path")
+			content, err := system.ReadFileContent(path)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"content": content})
+		})
+
+		api.POST("/files/save", func(c *gin.Context) {
+			var req struct {
+				Path    string `json:"path"`
+				Content string `json:"content"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if err := system.SaveFileContent(req.Path, req.Content); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "success"})
+		})
+
+		// Domains API
+		api.GET("/domains", func(c *gin.Context) {
+			// Mock logic: return domains based on Traefik labels
+			c.JSON(http.StatusOK, []gin.H{
+				{"domain": "panel.yourdomain.com", "target": "fox-admin", "status": "active"},
+			})
+		})
+
+		// System Utilities API
+		api.POST("/terminal/exec", func(c *gin.Context) {
+			var req struct {
+				ContainerID string `json:"containerId"`
+				Command     string `json:"command"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			output, err := system.ExecuteContainerCommand(req.ContainerID, req.Command)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "output": output})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"output": output})
+		})
+
+		api.POST("/backups/create", func(c *gin.Context) {
+			var req struct {
+				ProjectID string `json:"projectId"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			path, err := system.CreateBackup(req.ProjectID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"path": path})
+		})
+
+		api.GET("/cron", func(c *gin.Context) {
+			jobs, err := system.GetCronJobs()
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, jobs)
+		})
+
+		api.POST("/cron", func(c *gin.Context) {
+			var jobs []system.CronJob
+			if err := c.ShouldBindJSON(&jobs); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if err := system.SaveCronJobs(jobs); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "success"})
+		})
+
 		// Security Endpoints
 		api.GET("/security/stats", func(c *gin.Context) {
 			secData := security.GetData()
