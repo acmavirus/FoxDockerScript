@@ -1321,24 +1321,59 @@ watch(currentTab, (newTab) => {
                 </div>
              </div>
 
-             <!-- System Info Card -->
-             <div class="glass-card p-6">
-                <h3 class="font-black text-xs uppercase tracking-widest mb-6">Build Information</h3>
-                <div class="space-y-4">
-                   <div class="flex justify-between p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-dark-border">
-                      <span class="text-xs font-bold text-slate-500">Version</span>
-                      <span class="text-xs font-black">v1.2.5-stable</span>
-                   </div>
-                   <div class="flex justify-between p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-dark-border">
-                      <span class="text-xs font-bold text-slate-500">Branch</span>
-                      <span class="text-xs font-black">master</span>
-                   </div>
-                   <div class="flex justify-between p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-dark-border">
-                      <span class="text-xs font-bold text-slate-500">Environment</span>
-                      <span class="text-xs font-black text-green-500 uppercase">Production</span>
-                   </div>
-                </div>
-             </div>
+              <!-- System Info Card -->
+              <div class="glass-card p-6">
+                 <h3 class="font-black text-xs uppercase tracking-widest mb-6">Build Information</h3>
+                 <div class="space-y-4">
+                    <div class="flex justify-between p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-dark-border">
+                       <span class="text-xs font-bold text-slate-500">Version</span>
+                       <span class="text-xs font-black">v1.2.5-stable</span>
+                    </div>
+                    <div class="flex justify-between p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-dark-border">
+                       <span class="text-xs font-bold text-slate-500">Branch</span>
+                       <span class="text-xs font-black">master</span>
+                    </div>
+                    <div class="flex justify-between p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-dark-border">
+                       <span class="text-xs font-bold text-slate-500">Environment</span>
+                       <span class="text-xs font-black text-green-500 uppercase">Production</span>
+                    </div>
+                 </div>
+              </div>
+
+              <!-- Notification Config (Merged) -->
+              <div class="glass-card p-6 md:col-span-2 space-y-6">
+                 <div class="flex items-center space-x-3 text-fox-500">
+                    <Bell class="w-6 h-6" />
+                    <h3 class="font-black text-xs uppercase tracking-widest">Alert Channels</h3>
+                 </div>
+                 
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <!-- Telegram -->
+                    <div class="space-y-4 p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-dark-border">
+                       <div class="flex items-center justify-between">
+                          <span class="font-bold text-sm">Telegram Bot</span>
+                          <div @click="notificationSettings.telegram_enabled = !notificationSettings.telegram_enabled" class="w-10 h-5 bg-fox-500 rounded-full flex items-center px-1 shadow-inner cursor-pointer transition-all" :class="{ 'bg-slate-300': !notificationSettings.telegram_enabled }">
+                            <div class="w-3.5 h-3.5 bg-white rounded-full shadow-sm transition-transform" :class="{ 'translate-x-4.5': notificationSettings.telegram_enabled }"></div>
+                          </div>
+                       </div>
+                       <input v-model="notificationSettings.telegram_token" placeholder="Bot Token" class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-dark-border rounded-xl px-4 py-2 text-xs font-mono" />
+                       <input v-model="notificationSettings.telegram_chat_id" placeholder="Chat ID" class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-dark-border rounded-xl px-4 py-2 text-xs font-mono" />
+                    </div>
+
+                    <!-- Discord -->
+                    <div class="space-y-4 p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-dark-border">
+                       <div class="flex items-center justify-between">
+                          <span class="font-bold text-sm">Discord Webhook</span>
+                          <div @click="notificationSettings.discord_enabled = !notificationSettings.discord_enabled" class="w-10 h-5 bg-fox-500 rounded-full flex items-center px-1 shadow-inner cursor-pointer transition-all" :class="{ 'bg-slate-300': !notificationSettings.discord_enabled }">
+                            <div class="w-3.5 h-3.5 bg-white rounded-full shadow-sm transition-transform" :class="{ 'translate-x-4.5': notificationSettings.discord_enabled }"></div>
+                          </div>
+                       </div>
+                       <input v-model="notificationSettings.discord_webhook" placeholder="Webhook URL" class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-dark-border rounded-xl px-4 py-2 text-xs font-mono" />
+                    </div>
+                 </div>
+                 
+                 <button @click="saveNotificationSettings" class="button-primary w-full py-4 text-xs font-black uppercase tracking-widest shadow-lg shadow-fox-500/20">Update All Channels</button>
+              </div>
           </div>
         </div>
 
@@ -1624,79 +1659,6 @@ watch(currentTab, (newTab) => {
           </div>
         </div>
 
-        <!-- Settings View -->
-        <div v-else-if="currentTab === 'settings'" class="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-bottom-10 duration-500">
-           <div class="flex items-center justify-between">
-            <div>
-              <h2 class="text-3xl font-black tracking-tight flex items-center space-x-3">
-                <Settings class="w-10 h-10 text-fox-500" />
-                <span>Panel Settings</span>
-              </h2>
-              <p class="text-slate-500 mt-1 font-medium">Cấu hình hệ thống và thông báo.</p>
-            </div>
-          </div>
-
-          <!-- Notification Config -->
-          <div class="glass-card p-8 space-y-6">
-             <div class="flex items-center space-x-3 text-fox-500">
-                <Bell class="w-6 h-6" />
-                <h3 class="font-black text-xs uppercase tracking-widest">Alert Channels</h3>
-             </div>
-             
-             <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <!-- Telegram -->
-                <div class="space-y-4 p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-dark-border">
-                   <div class="flex items-center justify-between">
-                      <span class="font-bold text-sm">Telegram Bot</span>
-                      <div @click="notificationSettings.telegram_enabled = !notificationSettings.telegram_enabled" class="w-10 h-5 bg-fox-500 rounded-full flex items-center px-1 shadow-inner cursor-pointer transition-all" :class="{ 'bg-slate-300': !notificationSettings.telegram_enabled }">
-                        <div class="w-3.5 h-3.5 bg-white rounded-full shadow-sm transition-transform" :class="{ 'translate-x-4.5': notificationSettings.telegram_enabled }"></div>
-                      </div>
-                   </div>
-                   <input v-model="notificationSettings.telegram_token" placeholder="Bot Token" class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-dark-border rounded-xl px-4 py-2 text-xs font-mono" />
-                   <input v-model="notificationSettings.telegram_chat_id" placeholder="Chat ID" class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-dark-border rounded-xl px-4 py-2 text-xs font-mono" />
-                </div>
-
-                <!-- Discord -->
-                <div class="space-y-4 p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-dark-border">
-                   <div class="flex items-center justify-between">
-                      <span class="font-bold text-sm">Discord Webhook</span>
-                      <div @click="notificationSettings.discord_enabled = !notificationSettings.discord_enabled" class="w-10 h-5 bg-fox-500 rounded-full flex items-center px-1 shadow-inner cursor-pointer transition-all" :class="{ 'bg-slate-300': !notificationSettings.discord_enabled }">
-                        <div class="w-3.5 h-3.5 bg-white rounded-full shadow-sm transition-transform" :class="{ 'translate-x-4.5': notificationSettings.discord_enabled }"></div>
-                      </div>
-                   </div>
-                   <input v-model="notificationSettings.discord_webhook" placeholder="Webhook URL" class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-dark-border rounded-xl px-4 py-2 text-xs font-mono" />
-                </div>
-             </div>
-             
-             <button @click="saveNotificationSettings" class="button-primary w-full py-4 text-xs font-black uppercase tracking-widest">Update Channels</button>
-          </div>
-
-          <!-- UI Customization -->
-          <div class="glass-card p-8 space-y-6">
-             <div class="flex items-center space-x-3 text-fox-500">
-                <Type class="w-6 h-6" />
-                <h3 class="font-black text-xs uppercase tracking-widest">UI Appearance</h3>
-             </div>
-             <div class="grid grid-cols-2 gap-4">
-                <div class="space-y-2">
-                   <label class="text-[10px] font-black text-slate-400 uppercase">Font Family</label>
-                   <select v-model="dashboardSettings.fontFamily" class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 py-2 text-xs font-bold">
-                      <option value="Outfit, sans-serif">Outfit (Default)</option>
-                      <option value="Inter, sans-serif">Inter</option>
-                      <option value="Roboto, sans-serif">Roboto</option>
-                      <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
-                   </select>
-                </div>
-                <div class="space-y-2">
-                   <label class="text-[10px] font-black text-slate-400 uppercase">Base Size</label>
-                   <select v-model="dashboardSettings.fontSize" class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 py-2 text-xs font-bold">
-                      <option value="12px">Compact (12px)</option>
-                      <option value="14px">Normal (14px)</option>
-                      <option value="16px">Large (16px)</option>
-                   </select>
-                </div>
-             </div>
-          </div>
         <!-- Containers View (Metrics) -->
         <div v-else-if="currentTab === 'containers'" class="max-w-6xl mx-auto space-y-8 animate-in slide-in-from-right-10 duration-500">
            <div class="flex items-center justify-between">
@@ -1753,9 +1715,10 @@ watch(currentTab, (newTab) => {
            </div>
            <button @click="currentTab = 'dashboard'" class="px-6 py-2 bg-slate-200 dark:bg-slate-800 text-slate-500 font-black rounded-xl text-xs uppercase tracking-[0.2em] hover:bg-fox-500 hover:text-white transition-all shadow-md">Quay lại Dashboard</button>
         </div>
-      </Transition>
-    </div>
-  </main>
+          </div>
+        </Transition>
+      </div>
+    </main>
 
     <!-- Global Toast System -->
     <div class="fixed bottom-8 right-8 z-[100] flex flex-col space-y-3">
