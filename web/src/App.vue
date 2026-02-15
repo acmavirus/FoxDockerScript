@@ -36,6 +36,54 @@ import {
 const currentTab = ref('dashboard')
 const securitySubTab = ref('overview')
 
+// Authentication State
+const isAuthenticated = ref(!!localStorage.getItem('fox_token'))
+const loginForm = ref({ username: '', password: '' })
+const isLoggingIn = ref(false)
+
+// Axios Interceptor for Security
+axios.interceptors.request.use(config => {
+  const token = localStorage.getItem('fox_token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+}, error => Promise.reject(error))
+
+axios.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('fox_token')
+      isAuthenticated.value = false
+    }
+    return Promise.reject(error)
+  }
+)
+
+const handleLogin = async () => {
+  isLoggingIn.value = true
+  try {
+    const response = await axios.post('/api/login', loginForm.value)
+    localStorage.setItem('fox_token', response.data.token)
+    isAuthenticated.value = true
+    showToast('Login successful', 'success')
+    // Refresh data after login
+    fetchStats()
+    fetchProjects()
+  } catch (error: any) {
+    showToast(error.response?.data?.error || 'Login failed', 'error')
+  } finally {
+    isLoggingIn.value = false
+  }
+}
+
+const handleLogout = () => {
+  localStorage.removeItem('fox_token')
+  isAuthenticated.value = false
+  showToast('Logged out successfully', 'info')
+}
+
 interface SidebarItem {
   id: string
   label: string
@@ -526,7 +574,41 @@ watch(currentTab, (newTab) => {
 </script>
 
 <template>
-  <div class="flex h-screen bg-slate-50 dark:bg-dark-bg text-slate-900 dark:text-slate-100" :style="{ fontFamily: dashboardSettings.fontFamily, fontSize: dashboardSettings.fontSize }">
+  <div v-if="!isAuthenticated" class="min-h-screen bg-slate-900 flex items-center justify-center p-6 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black">
+    <div class="glass-card max-w-md w-full p-10 space-y-8 animate-in fade-in zoom-in duration-500 shadow-2xl border-fox-500/20">
+      <div class="text-center space-y-4">
+        <div class="w-20 h-20 bg-fox-500 rounded-3xl mx-auto flex items-center justify-center shadow-2xl shadow-fox-500/40 rotate-12 hover:rotate-0 transition-transform duration-500">
+           <Box class="text-white w-12 h-12" />
+        </div>
+        <h1 class="text-4xl font-black tracking-tighter text-white">Fox<span class="text-fox-500">Docker</span></h1>
+        <p class="text-slate-400 font-medium">Truy cập bảng điều khiển hệ thống</p>
+      </div>
+
+      <form @submit.prevent="handleLogin" class="space-y-6">
+        <div class="space-y-2">
+          <label class="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Username</label>
+          <div class="relative group">
+            <User class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-fox-500 transition-colors" />
+            <input v-model="loginForm.username" type="text" placeholder="admin" class="w-full bg-slate-800/50 border border-slate-700 rounded-2xl py-4 pl-12 pr-4 text-white outline-none focus:ring-2 focus:ring-fox-500/50 focus:border-fox-500 transition-all font-bold" />
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <label class="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Password</label>
+          <div class="relative group">
+            <ShieldCheck class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-fox-500 transition-colors" />
+            <input v-model="loginForm.password" type="password" placeholder="••••••••" class="w-full bg-slate-800/50 border border-slate-700 rounded-2xl py-4 pl-12 pr-4 text-white outline-none focus:ring-2 focus:ring-fox-500/50 focus:border-fox-500 transition-all font-bold" />
+          </div>
+        </div>
+
+        <button :disabled="isLoggingIn" type="submit" class="button-primary w-full py-4 text-sm font-black uppercase tracking-widest shadow-xl shadow-fox-500/20 active:scale-95 transition-all">
+          {{ isLoggingIn ? 'Đang xác thực...' : 'Đăng nhập hệ thống' }}
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div v-else class="flex h-screen bg-slate-50 dark:bg-dark-bg text-slate-900 dark:text-slate-100" :style="{ fontFamily: dashboardSettings.fontFamily, fontSize: dashboardSettings.fontSize }">
     <!-- Sidebar -->
     <aside class="w-72 bg-white dark:bg-dark-card border-r border-slate-200 dark:border-dark-border p-6 flex flex-col overflow-y-auto custom-scrollbar">
       <div class="flex items-center justify-between mb-8 px-2">
@@ -598,23 +680,18 @@ watch(currentTab, (newTab) => {
       </nav>
 
       <!-- User Profile -->
-      <div class="mt-8 p-4 bg-slate-100 dark:bg-slate-800/50 rounded-2xl border border-transparent dark:border-dark-border transition-all hover:border-fox-500/30 group">
-        <div class="flex items-center justify-between">
+      <div class="mt-auto pt-6 border-t border-slate-100 dark:border-dark-border">
+        <div class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl group transition-all">
           <div class="flex items-center space-x-3">
-            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-fox-400 to-fox-600 flex items-center justify-center text-white text-sm font-bold shadow-md shadow-fox-500/20 group-hover:scale-110 transition-transform">AV</div>
-            <div>
-              <p class="text-sm font-bold">AcmaTvirus</p>
-              <p class="text-[10px] text-slate-500 leading-none font-bold uppercase tracking-tighter">Super Admin</p>
-            </div>
+             <div class="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-black text-slate-500">A</div>
+             <div>
+                <p class="text-xs font-black">Administrator</p>
+                <p class="text-[9px] font-bold text-green-500">Online</p>
+             </div>
           </div>
-          <div class="flex items-center space-x-1 shrink-0">
-            <button class="p-1.5 text-slate-400 hover:bg-fox-500 hover:text-white rounded-lg transition-all" title="Settings">
-              <User class="w-4 h-4" />
-            </button>
-            <button class="p-1.5 text-slate-400 hover:bg-red-500 hover:text-white rounded-lg transition-all" title="Logout">
-              <LogOut class="w-4 h-4" />
-            </button>
-          </div>
+          <button @click="handleLogout" class="p-2 hover:bg-red-500/10 text-slate-400 hover:text-red-500 rounded-xl transition-all" title="Logout">
+             <LogOut class="w-5 h-5" />
+          </button>
         </div>
       </div>
     </aside>
