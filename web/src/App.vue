@@ -99,7 +99,7 @@ const scanning = ref(false)
 const runSecurityScan = async () => {
   scanning.value = true
   try {
-    const response = await axios.post('/api/security/scan')
+    await axios.post('/api/security/scan')
     showToast('Security scan completed')
     await fetchSecurityData()
   } catch (error) {
@@ -189,10 +189,12 @@ watch(dashboardSettings, applySettings, { deep: true })
 
 let statsInterval: any = null
 let securityInterval: any = null
+let metricsInterval: any = null
 
 onUnmounted(() => {
   if (statsInterval) clearInterval(statsInterval)
   if (securityInterval) clearInterval(securityInterval)
+  if (metricsInterval) clearInterval(metricsInterval)
 })
 
 // Sidebar menu groups
@@ -504,7 +506,6 @@ onMounted(() => {
   securityInterval = setInterval(fetchSecurityData, 10000)
 })
 
-let metricsInterval: any = null
 
 watch(currentTab, (newTab) => {
   if (newTab === 'logs') {
