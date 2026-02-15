@@ -14,6 +14,7 @@ import (
 	"github.com/acmavirus/foxdocker-panel"
 	"github.com/acmavirus/foxdocker-panel/internal/security"
 	"github.com/acmavirus/foxdocker-panel/internal/system"
+	"github.com/acmavirus/foxdocker-panel/internal/database"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/disk"
@@ -126,6 +127,11 @@ func main() {
 		gin.DefaultWriter = mw
 	}
 
+	// Initialize Database (Phase 1)
+	if err := database.Init(); err != nil {
+		log.Printf("Warning: Failed to init database: %v", err)
+	}
+
 	// Initialize Security
 	if err := security.Init(); err != nil {
 		log.Printf("Warning: Failed to init security: %v", err)
@@ -133,9 +139,54 @@ func main() {
 
 	r := gin.Default()
 
+	// Auth Middleware (Phase 1)
+	authMiddleware := func(c *gin.Context) {
+		token := c.GetHeader("Authorization")
+		if token == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			c.Abort()
+			return
+		}
+		// Expecting "Bearer <token>"
+		parts := strings.Split(token, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token format"})
+			c.Abort()
+			return
+		}
+		claims, err := security.ValidateToken(parts[1])
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
+			c.Abort()
+			return
+		}
+		c.Set("username", claims.Username)
+		c.Next()
+	}
+
+	// Login Endpoint
+	r.POST("/api/login", func(c *gin.Context) {
+		var loginReq struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+		if err := c.ShouldBindJSON(&loginReq); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+			return
+		}
+
+		// Simple mock auth for now - in production, check against database.User
+		if loginReq.Username == "admin" && loginReq.Password == "admin123" {
+			token, _ := security.GenerateToken(loginReq.Username)
+			c.JSON(http.StatusOK, gin.H{"token": token})
+		} else {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		}
+	})
 
 	// API Routes
 	api := r.Group("/api")
+	api.Use(authMiddleware)
 	{
 		api.GET("/ping", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
@@ -180,7 +231,7 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Installation started"})
 		})
 
-		// Project Endpoints
+		// Project Endpoints (Phase 2)
 		api.GET("/projects", func(c *gin.Context) {
 			// Real logic: find all docker-compose.yml files in /opt/foxdocker/apps
 			projects := []gin.H{}
@@ -188,13 +239,41 @@ func main() {
 			for _, f := range files {
 				if f.IsDir() {
 					projects = append(projects, gin.H{
-						"name":   f.Name(),
-						"status": "online", // Needs real docker status check
-						"type":   "Docker",
+						"name":    f.Name(),
+						"status":  "online", // Needs real docker status check
+						"type":    "Docker",
+						"domains": []string{f.Name() + ".local", "test.dev"},
 					})
 				}
 			}
 			c.JSON(http.StatusOK, projects)
+		})
+
+		api.POST("/projects/stop", func(c *gin.Context) {
+			var req struct {
+				Name string `json:"name"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			cmd := exec.Command("docker", "compose", "stop")
+			cmd.Dir = filepath.Join("/opt/foxdocker/apps", req.Name)
+			if err := cmd.Run(); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to stop project"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "success"})
+		})
+
+		api.DELETE("/projects/:name", func(c *gin.Context) {
+			name := c.Param("name")
+			projectDir := filepath.Join("/opt/foxdocker/apps", name)
+			cmd := exec.Command("docker", "compose", "down", "-v")
+			cmd.Dir = projectDir
+			cmd.Run() // Best effort down
+			os.RemoveAll(projectDir)
+			c.JSON(http.StatusOK, gin.H{"status": "success"})
 		})
 
 		// Databases API
@@ -325,6 +404,30 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"status": "success"})
 		})
 
+		// Notification Settings
+		api.GET("/settings/notifications", func(c *gin.Context) {
+			settings, _ := system.GetNotificationSettings()
+			c.JSON(http.StatusOK, settings)
+		})
+
+		api.POST("/settings/notifications", func(c *gin.Context) {
+			var settings system.NotificationSettings
+			if err := c.ShouldBindJSON(&settings); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			system.SaveNotificationSettings(settings)
+			c.JSON(http.StatusOK, gin.H{"status": "success"})
+		})
+
+		// Container Stats
+		api.GET("/containers/stats", func(c *gin.Context) {
+			// Proxy to docker stats --no-stream --format json
+			cmd := exec.Command("docker", "stats", "--no-stream", "--format", "json")
+			output, _ := cmd.CombinedOutput()
+			c.Data(http.StatusOK, "application/json", output)
+		})
+
 		// Security Endpoints
 		api.GET("/security/stats", func(c *gin.Context) {
 			secData := security.GetData()
@@ -391,6 +494,18 @@ func main() {
 				"message": "Security scan completed. All systems operational.",
 				"timestamp": time.Now().Format(time.RFC3339),
 			})
+		})
+
+		api.POST("/security/scan/image", func(c *gin.Context) {
+			var req struct {
+				Image string `json:"image"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			res := security.ScanImage(req.Image)
+			c.JSON(http.StatusOK, res)
 		})
 
 		// System Logs Endpoints

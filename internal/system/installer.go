@@ -11,11 +11,12 @@ import (
 
 // App represents an application template
 type App struct {
-	ID    string   `json:"id"`
-	Name  string   `json:"name"`
-	Image string   `json:"image"`
-	Ports string   `json:"ports"`
-	Env   []string `json:"env"`
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Image   string   `json:"image"`
+	Ports   string   `json:"ports"`
+	Domains []string `json:"domains"`
+	Env     []string `json:"env"`
 }
 
 // InstallApp handles the installation of an app using Docker Compose
@@ -63,6 +64,24 @@ func generateComposeFile(app App, envVars map[string]string) string {
 	}
 
 	sb.WriteString("    restart: always\n")
+
+	if len(app.Domains) > 0 {
+		hostRule := ""
+		for i, d := range app.Domains {
+			if i > 0 {
+				hostRule += " || "
+			}
+			hostRule += fmt.Sprintf("Host(`%s`)", d)
+		}
+		sb.WriteString("    labels:\n")
+		sb.WriteString("      - \"traefik.enable=true\"\n")
+		sb.WriteString(fmt.Sprintf("      - \"traefik.http.routers.%s.rule=%s\"\n", app.ID, hostRule))
+		sb.WriteString(fmt.Sprintf("      - \"traefik.http.routers.%s.entrypoints=websecure\"\n", app.ID))
+		sb.WriteString(fmt.Sprintf("      - \"traefik.http.routers.%s.tls.certresolver=myresolver\"\n", app.ID))
+		if app.Ports != "" {
+			sb.WriteString(fmt.Sprintf("      - \"traefik.http.services.%s.loadbalancer.server.port=%s\"\n", app.ID, app.Ports))
+		}
+	}
 	sb.WriteString("networks:\n")
 	sb.WriteString("  default:\n")
 	sb.WriteString("    name: foxdocker-network\n")

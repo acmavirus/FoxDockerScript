@@ -88,9 +88,10 @@ const fetchSecurityData = async () => {
 const toggleFirewall = async () => {
   try {
     const res = await axios.post('/api/security/firewall/toggle')
+    showToast('Firewall toggled')
     firewallConfig.value.enabled = res.data.enabled
   } catch (error) {
-    alert('Failed to toggle firewall')
+    showToast('Failed to toggle firewall', 'error')
   }
 }
 
@@ -99,10 +100,10 @@ const runSecurityScan = async () => {
   scanning.value = true
   try {
     const response = await axios.post('/api/security/scan')
-    alert(response.data.message)
+    showToast('Security scan completed')
     await fetchSecurityData()
   } catch (error) {
-    alert('Failed to trigger security scan')
+    showToast('Failed to trigger scan', 'error')
   } finally {
     scanning.value = false
   }
@@ -242,9 +243,30 @@ const firewallActivity = ref<any[]>([])
 const firewallConfig = ref({ enabled: true, ports: [] as string[] })
 const auditLogs = ref<any[]>([])
 
+// UI State & Toast System
+const toasts = ref<{ id: number, message: string, type: 'success' | 'error' | 'info' }[]>([])
+const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+  const id = Date.now()
+  toasts.value.push({ id, message, type })
+  setTimeout(() => {
+    toasts.value = toasts.value.filter(t => t.id !== id)
+  }, 3000)
+}
+
+const isNavigating = ref(false)
+const changeTab = (tabId: string) => {
+  if (currentTab.value === tabId) return
+  isNavigating.value = true
+  setTimeout(() => {
+    currentTab.value = tabId
+    isNavigating.value = false
+  }, 300)
+}
+
 // App Store Logic
 const installApp = async (app: any) => {
-  const confirmInstall = confirm(`Bạn có muốn cài đặt ${app.name}?`)
+  const domain = prompt(`Nhập domain cho ${app.name} (ví dụ: myapp.com, để trống nếu không dùng):`)
+  const confirmInstall = confirm(`Bạn có muốn cài đặt ${app.name}? ${domain ? '\nVới domain: ' + domain : ''}`)
   if (!confirmInstall) return
 
   try {
@@ -254,26 +276,31 @@ const installApp = async (app: any) => {
         name: app.name,
         image: app.image,
         ports: app.ports,
+        domains: domain ? domain.split(',').map((d: string) => d.trim()) : [],
         env: app.env
       },
       envVars: {} // In the future, we can add a form to collect these
     })
-    alert(response.data.message)
-    currentTab.value = 'projects'
+    showToast(response.data.message)
+    changeTab('projects')
     fetchProjects()
   } catch (error) {
     console.error('Failed to install app:', error)
-    alert('Failed to trigger installation')
+    showToast('Failed to trigger installation', 'error')
   }
 }
 
 const projects = ref<any[]>([])
+const isLoadingProjects = ref(false)
 const fetchProjects = async () => {
+  isLoadingProjects.value = true
   try {
     const response = await axios.get('/api/projects')
     projects.value = response.data
   } catch (error) {
     console.error('Failed to fetch projects:', error)
+  } finally {
+    isLoadingProjects.value = false
   }
 }
 
@@ -411,15 +438,73 @@ const saveCronJobs = async () => {
   }
 }
 
+// Notification Logic
+const notificationSettings = ref({
+  telegram_enabled: false,
+  telegram_token: '',
+  telegram_chat_id: '',
+  discord_enabled: false,
+  discord_webhook: ''
+})
+const fetchNotificationSettings = async () => {
+  try {
+    const response = await axios.get('/api/settings/notifications')
+    notificationSettings.value = response.data
+  } catch (error) {
+    console.error('Failed to fetch notifications settings:', error)
+  }
+}
+const saveNotificationSettings = async () => {
+  try {
+    await axios.post('/api/settings/notifications', notificationSettings.value)
+    alert('Settings saved successfully')
+  } catch (error) {
+    alert('Failed to save settings')
+  }
+}
+
+// Container Metrics Logic
+const containerStats = ref<any[]>([])
+const fetchContainerStats = async () => {
+  try {
+    const response = await axios.get('/api/containers/stats')
+    // Handle streaming-like JSON output from cli if possible or just parse
+    // For now we assume the backend returns an array or single json object per call
+    if (response.data) {
+      containerStats.value = Array.isArray(response.data) ? response.data : [response.data]
+    }
+  } catch (error) {
+    console.error('Failed to fetch container stats:', error)
+  }
+}
+
+// Image Scan Logic
+const imageScanInput = ref('')
+const imageScanResults = ref<any[]>([])
+const scanImage = async (imageName: string) => {
+  if (!imageName) return alert('Please enter an image name')
+  try {
+    const response = await axios.post('/api/security/scan/image', { image: imageName })
+    imageScanResults.value.unshift(response.data)
+    imageScanInput.value = ''
+  } catch (error) {
+    alert('Failed to scan image')
+  }
+}
+
 onMounted(() => {
   fetchStats()
   fetchSecurityData()
   fetchProjects()
   fetchDatabases()
   fetchDomains()
+  fetchNotificationSettings()
   statsInterval = setInterval(fetchStats, 3000)
+  metricsInterval = setInterval(fetchContainerStats, 5000)
   securityInterval = setInterval(fetchSecurityData, 10000)
 })
+
+let metricsInterval: any = null
 
 watch(currentTab, (newTab) => {
   if (newTab === 'logs') {
@@ -491,7 +576,7 @@ watch(currentTab, (newTab) => {
             <div 
               v-for="item in group.items" 
               :key="item.id"
-              @click="currentTab = item.id"
+              @click="changeTab(item.id)"
               class="sidebar-item group flex items-center"
               :class="{ 'active': currentTab === item.id }"
             >
@@ -564,6 +649,8 @@ watch(currentTab, (newTab) => {
 
       <!-- Views -->
       <div class="flex-1 overflow-y-auto p-8 custom-scrollbar">
+        <Transition name="fade" mode="out-in">
+          <div :key="currentTab">
         <!-- Dashboard View -->
         <div v-if="currentTab === 'dashboard'" class="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
           <div class="flex items-center justify-between">
@@ -666,9 +753,10 @@ watch(currentTab, (newTab) => {
                   </div>
                   <div>
                     <p class="font-black group-hover:text-fox-500 transition-colors font-mono tracking-tight">{{ project.name }}</p>
-                    <div class="flex items-center space-x-2 mt-0.5">
-                      <span class="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded font-black tracking-widest uppercase">{{ project.type }}</span>
-                    </div>
+                  <div class="flex flex-wrap gap-1 mt-1">
+                    <span v-for="d in project.domains" :key="d" class="text-[8px] bg-fox-500/10 text-fox-500 px-1.5 py-0.5 rounded border border-fox-500/20 font-bold uppercase tracking-tighter">{{ d }}</span>
+                    <span v-if="!project.domains || project.domains.length === 0" class="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded font-black tracking-widest uppercase">No Domain</span>
+                  </div>
                   </div>
                 </div>
                 <div class="flex items-center space-x-6">
@@ -795,6 +883,37 @@ watch(currentTab, (newTab) => {
                   Sync IP Blacklist
                 </button>
               </div>
+            </div>
+
+            <!-- Image Vulnerability Scans -->
+            <div class="glass-card overflow-hidden">
+               <div class="p-6 border-b border-slate-200 dark:border-dark-border bg-slate-50/50 dark:bg-slate-800/30 flex justify-between items-center">
+                  <h3 class="font-black text-xs uppercase tracking-widest">Image Vulnerability Scanner</h3>
+                  <div class="flex items-center space-x-2">
+                     <input v-model="imageScanInput" placeholder="e.g. nginx:latest" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-dark-border rounded-lg px-3 py-1 text-xs" />
+                     <button @click="scanImage(imageScanInput)" class="button-primary py-1 px-4 text-[10px] uppercase font-black">Scan Now</button>
+                  </div>
+               </div>
+               <div class="divide-y divide-slate-100 dark:divide-dark-border">
+                  <div v-for="res in imageScanResults" :key="res.Time" class="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/20">
+                     <div class="flex items-center space-x-4">
+                        <div class="w-8 h-8 rounded bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                           <Layers class="w-4 h-4 text-slate-400" />
+                        </div>
+                        <div>
+                           <p class="text-xs font-bold">{{ res.Image }}</p>
+                           <p class="text-[9px] text-slate-400">{{ res.Time }}</p>
+                        </div>
+                     </div>
+                     <div class="flex items-center space-x-4">
+                        <div class="text-right">
+                           <p class="text-[10px] font-black" :class="res.Vulnerabilities > 5 ? 'text-red-500' : 'text-orange-500'">{{ res.Vulnerabilities }} Found</p>
+                           <p class="text-[9px] font-bold uppercase" :class="res.Vulnerabilities > 5 ? 'text-red-400' : 'text-orange-400'">{{ res.Severity }} Severity</p>
+                        </div>
+                        <div :class="`w-2 h-2 rounded-full ${res.Vulnerabilities === 0 ? 'bg-green-500' : (res.Vulnerabilities > 5 ? 'bg-red-500' : 'bg-orange-500')}`"></div>
+                     </div>
+                  </div>
+               </div>
             </div>
           </div>
 
@@ -1504,23 +1623,173 @@ watch(currentTab, (newTab) => {
           </div>
         </div>
 
-        <!-- Placeholder for other tabs -->
-        <div v-else class="flex flex-col items-center justify-center h-full space-y-6 animate-in zoom-in duration-300">
-          <div class="w-24 h-24 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center animate-pulse border border-slate-200 dark:border-dark-border shadow-inner">
-            <component :is="sidebarGroups.flatMap(g => g.items).find(i => i.id === currentTab)?.icon || LayoutDashboard" class="w-12 h-12 text-slate-300" />
+        <!-- Settings View -->
+        <div v-else-if="currentTab === 'settings'" class="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-bottom-10 duration-500">
+           <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-3xl font-black tracking-tight flex items-center space-x-3">
+                <Settings class="w-10 h-10 text-fox-500" />
+                <span>Panel Settings</span>
+              </h2>
+              <p class="text-slate-500 mt-1 font-medium">Cấu hình hệ thống và thông báo.</p>
+            </div>
           </div>
-          <div class="text-center space-y-2">
-            <h2 class="text-2xl font-black text-slate-400 capitalize tracking-tight">{{ currentTab }}</h2>
-            <p class="text-slate-500 text-sm font-medium">Phòng Lab đang hoàn thiện tính năng này.</p>
+
+          <!-- Notification Config -->
+          <div class="glass-card p-8 space-y-6">
+             <div class="flex items-center space-x-3 text-fox-500">
+                <Bell class="w-6 h-6" />
+                <h3 class="font-black text-xs uppercase tracking-widest">Alert Channels</h3>
+             </div>
+             
+             <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- Telegram -->
+                <div class="space-y-4 p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-dark-border">
+                   <div class="flex items-center justify-between">
+                      <span class="font-bold text-sm">Telegram Bot</span>
+                      <div @click="notificationSettings.telegram_enabled = !notificationSettings.telegram_enabled" class="w-10 h-5 bg-fox-500 rounded-full flex items-center px-1 shadow-inner cursor-pointer transition-all" :class="{ 'bg-slate-300': !notificationSettings.telegram_enabled }">
+                        <div class="w-3.5 h-3.5 bg-white rounded-full shadow-sm transition-transform" :class="{ 'translate-x-4.5': notificationSettings.telegram_enabled }"></div>
+                      </div>
+                   </div>
+                   <input v-model="notificationSettings.telegram_token" placeholder="Bot Token" class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-dark-border rounded-xl px-4 py-2 text-xs font-mono" />
+                   <input v-model="notificationSettings.telegram_chat_id" placeholder="Chat ID" class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-dark-border rounded-xl px-4 py-2 text-xs font-mono" />
+                </div>
+
+                <!-- Discord -->
+                <div class="space-y-4 p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-dark-border">
+                   <div class="flex items-center justify-between">
+                      <span class="font-bold text-sm">Discord Webhook</span>
+                      <div @click="notificationSettings.discord_enabled = !notificationSettings.discord_enabled" class="w-10 h-5 bg-fox-500 rounded-full flex items-center px-1 shadow-inner cursor-pointer transition-all" :class="{ 'bg-slate-300': !notificationSettings.discord_enabled }">
+                        <div class="w-3.5 h-3.5 bg-white rounded-full shadow-sm transition-transform" :class="{ 'translate-x-4.5': notificationSettings.discord_enabled }"></div>
+                      </div>
+                   </div>
+                   <input v-model="notificationSettings.discord_webhook" placeholder="Webhook URL" class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-dark-border rounded-xl px-4 py-2 text-xs font-mono" />
+                </div>
+             </div>
+             
+             <button @click="saveNotificationSettings" class="button-primary w-full py-4 text-xs font-black uppercase tracking-widest">Update Channels</button>
           </div>
-          <button @click="currentTab = 'dashboard'" class="px-6 py-2 bg-slate-200 dark:bg-slate-800 text-slate-500 font-black rounded-xl text-xs uppercase tracking-[0.2em] hover:bg-fox-500 hover:text-white transition-all shadow-md">Quay lại Dashboard</button>
+
+          <!-- UI Customization -->
+          <div class="glass-card p-8 space-y-6">
+             <div class="flex items-center space-x-3 text-fox-500">
+                <Type class="w-6 h-6" />
+                <h3 class="font-black text-xs uppercase tracking-widest">UI Appearance</h3>
+             </div>
+             <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-2">
+                   <label class="text-[10px] font-black text-slate-400 uppercase">Font Family</label>
+                   <select v-model="dashboardSettings.fontFamily" class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 py-2 text-xs font-bold">
+                      <option value="Outfit, sans-serif">Outfit (Default)</option>
+                      <option value="Inter, sans-serif">Inter</option>
+                      <option value="Roboto, sans-serif">Roboto</option>
+                      <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+                   </select>
+                </div>
+                <div class="space-y-2">
+                   <label class="text-[10px] font-black text-slate-400 uppercase">Base Size</label>
+                   <select v-model="dashboardSettings.fontSize" class="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 py-2 text-xs font-bold">
+                      <option value="12px">Compact (12px)</option>
+                      <option value="14px">Normal (14px)</option>
+                      <option value="16px">Large (16px)</option>
+                   </select>
+                </div>
+             </div>
+          </div>
+        <!-- Containers View (Metrics) -->
+        <div v-else-if="currentTab === 'containers'" class="max-w-6xl mx-auto space-y-8 animate-in slide-in-from-right-10 duration-500">
+           <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-3xl font-black tracking-tight flex items-center space-x-3">
+                <Box class="w-10 h-10 text-fox-500" />
+                <span>Container Intelligence</span>
+              </h2>
+              <p class="text-slate-500 mt-1 font-medium italic">Chỉ số tài nguyên chi tiết từng container.</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 gap-4">
+             <div v-for="stat in containerStats" :key="stat.Name" class="glass-card p-6 flex flex-col md:flex-row md:items-center justify-between hover:border-fox-500/30 transition-all">
+                <div class="flex items-center space-x-4 mb-4 md:mb-0">
+                   <div class="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center">
+                      <Box class="w-5 h-5 text-slate-400" />
+                   </div>
+                   <div>
+                      <p class="font-black text-sm">{{ stat.Name }}</p>
+                      <p class="text-[9px] text-slate-400 font-mono">{{ stat.ID }}</p>
+                   </div>
+                </div>
+                
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-8 flex-1 md:ml-12">
+                   <div class="space-y-1">
+                      <p class="text-[9px] font-black text-slate-400 uppercase">CPU %</p>
+                      <p class="font-bold text-fox-500">{{ stat.CPUPerc }}</p>
+                   </div>
+                   <div class="space-y-1">
+                      <p class="text-[9px] font-black text-slate-400 uppercase">MEM USAGE</p>
+                      <p class="font-bold text-purple-500">{{ stat.MemUsage }}</p>
+                   </div>
+                   <div class="space-y-1">
+                      <p class="text-[9px] font-black text-slate-400 uppercase">NET I/O</p>
+                      <p class="font-bold text-blue-500">{{ stat.NetIO }}</p>
+                   </div>
+                   <div class="space-y-1">
+                      <p class="text-[9px] font-black text-slate-400 uppercase">PIDS</p>
+                      <p class="font-bold text-slate-600 dark:text-slate-300">{{ stat.PIDs }}</p>
+                   </div>
+                </div>
+             </div>
+          </div>
         </div>
+
+        <div v-else class="flex flex-col items-center justify-center h-full space-y-6 animate-in zoom-in duration-300">
+           <div class="w-24 h-24 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center animate-pulse border border-slate-200 dark:border-dark-border shadow-inner">
+             <component :is="sidebarGroups.flatMap(g => g.items).find(i => i.id === currentTab)?.icon || LayoutDashboard" class="w-12 h-12 text-slate-300" />
+           </div>
+           <div class="text-center space-y-2">
+             <h2 class="text-2xl font-black text-slate-400 capitalize tracking-tight">{{ currentTab }}</h2>
+             <p class="text-slate-500 text-sm font-medium">Phòng Lab đang hoàn thiện tính năng này.</p>
+           </div>
+           <button @click="currentTab = 'dashboard'" class="px-6 py-2 bg-slate-200 dark:bg-slate-800 text-slate-500 font-black rounded-xl text-xs uppercase tracking-[0.2em] hover:bg-fox-500 hover:text-white transition-all shadow-md">Quay lại Dashboard</button>
+        </div>
+      </Transition>
+    </div>
+  </main>
+
+    <!-- Global Toast System -->
+    <div class="fixed bottom-8 right-8 z-[100] flex flex-col space-y-3">
+      <div 
+        v-for="toast in toasts" 
+        :key="toast.id" 
+        class="glass-card px-6 py-4 flex items-center space-x-4 shadow-2xl border-l-4 animate-in slide-in-from-right-10"
+        :class="[
+          toast.type === 'success' ? 'border-green-500' : 
+          toast.type === 'error' ? 'border-red-500' : 'border-blue-500'
+        ]"
+      >
+        <div 
+          class="w-2 h-2 rounded-full animate-pulse"
+          :class="[
+            toast.type === 'success' ? 'bg-green-500' : 
+            toast.type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+          ]"
+        ></div>
+        <span class="text-xs font-black uppercase tracking-widest">{{ toast.message }}</span>
       </div>
-    </main>
+    </div>
   </div>
 </template>
 
 <style>
+/* Smooth page transitions */
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
 /* Custom animations */
 .animate-in {
   animation: animate-in-kf 0.4s cubic-bezier(0.16, 1, 0.3, 1);

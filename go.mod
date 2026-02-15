@@ -41,5 +41,8 @@ require (
 	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
+	github.com/golang-jwt/jwt/v5 v5.2.1
+	gorm.io/driver/sqlite v1.5.7
+	gorm.io/gorm v1.25.12
 	google.golang.org/protobuf v1.36.11 // indirect
 )

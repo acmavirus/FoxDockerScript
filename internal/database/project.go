@@ -1,6 +1,4 @@
-// Copyright by AcmaTvirus
-package models
-
+package database
 import (
 	"time"
 )

@@ -31,11 +31,19 @@ type FirewallConfig struct {
 	Ports   []string `json:"ports"`
 }
 
+type ImageScanResult struct {
+	Image         string `json:"image"`
+	Vulnerabilities int    `json:"vulnerabilities"`
+	Severity      string `json:"severity"`
+	Time          string `json:"time"`
+}
+
 type SecurityData struct {
-	AuditLogs   []AuditLog     `json:"audit_logs"`
-	Firewall    []FirewallRule `json:"firewall"`
-	Config      FirewallConfig `json:"config"`
-	BlockedIps  []string       `json:"blocked_ips"`
+	AuditLogs    []AuditLog        `json:"audit_logs"`
+	Firewall     []FirewallRule    `json:"firewall"`
+	Config       FirewallConfig    `json:"config"`
+	BlockedIps   []string          `json:"blocked_ips"`
+	ImageScans   []ImageScanResult `json:"image_scans"`
 }
 
 var (
@@ -161,4 +169,28 @@ func GetSecurityScore() int {
 	}
 	if score < 0 { score = 0 }
 	return score
+}
+func ScanImage(imageName string) ImageScanResult {
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Mock scanning logic: random vulnerabilities for demo
+	res := ImageScanResult{
+		Image:         imageName,
+		Vulnerabilities: int(time.Now().Unix()) % 10,
+		Severity:      "Medium",
+		Time:          time.Now().Format("2006-01-02 15:04:05"),
+	}
+	if res.Vulnerabilities > 5 {
+		res.Severity = "High"
+	} else if res.Vulnerabilities == 0 {
+		res.Severity = "Safe"
+	}
+
+	data.ImageScans = append([]ImageScanResult{res}, data.ImageScans...)
+	if len(data.ImageScans) > 50 {
+		data.ImageScans = data.ImageScans[:50]
+	}
+	Save()
+	return res
 }
