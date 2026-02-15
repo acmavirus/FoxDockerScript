@@ -20,12 +20,11 @@ func ExecuteContainerCommand(containerID, command string) (string, error) {
 }
 
 func CreateBackup(projectID string) (string, error) {
-	backupDir := "/opt/foxdocker/backups"
-	os.MkdirAll(backupDir, 0755)
+	os.MkdirAll(BackupRoot, 0755)
 	
 	fileName := fmt.Sprintf("%s_%d.tar.gz", projectID, time.Now().Unix())
-	filePath := filepath.Join(backupDir, fileName)
-	projectPath := filepath.Join("/opt/foxdocker/apps", projectID)
+	filePath := filepath.Join(BackupRoot, fileName)
+	projectPath := filepath.Join(ProjectsRoot, projectID)
 	
 	cmd := exec.Command("tar", "-czf", filePath, "-C", projectPath, ".")
 	if output, err := cmd.CombinedOutput(); err != nil {

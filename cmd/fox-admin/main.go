@@ -2,22 +2,26 @@
 package main
 
 import (
-	"io"
 	"encoding/json"
-	"io/fs"
-	"net/http"
-	"log"
-	"time"
 	"fmt"
+	"io"
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/acmavirus/foxdocker-panel"
+	"github.com/acmavirus/foxdocker-panel/internal/database"
 	"github.com/acmavirus/foxdocker-panel/internal/security"
 	"github.com/acmavirus/foxdocker-panel/internal/system"
-	"github.com/acmavirus/foxdocker-panel/internal/database"
+	"github.com/gin-gonic/gin"
 	"github.com/shirou/gopsutil/v3/cpu"
-	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/mem"
 )
 
 type SystemStats struct {
@@ -201,13 +205,8 @@ func main() {
 
 		// App Store Endpoints
 		api.GET("/apps", func(c *gin.Context) {
-			file, err := os.ReadFile("web/src/apps.json")
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load apps"})
-				return
-			}
 			var apps interface{}
-			json.Unmarshal(file, &apps)
+			json.Unmarshal(foxdocker.AppsJSON, &apps)
 			c.JSON(http.StatusOK, apps)
 		})
 
@@ -235,7 +234,7 @@ func main() {
 		api.GET("/projects", func(c *gin.Context) {
 			// Real logic: find all docker-compose.yml files in /opt/foxdocker/apps
 			projects := []gin.H{}
-			files, _ := os.ReadDir("/opt/foxdocker/apps")
+			files, _ := os.ReadDir(system.ProjectsRoot)
 			for _, f := range files {
 				if f.IsDir() {
 					projects = append(projects, gin.H{
@@ -258,7 +257,7 @@ func main() {
 				return
 			}
 			cmd := exec.Command("docker", "compose", "stop")
-			cmd.Dir = filepath.Join("/opt/foxdocker/apps", req.Name)
+			cmd.Dir = filepath.Join(system.ProjectsRoot, req.Name)
 			if err := cmd.Run(); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to stop project"})
 				return
@@ -268,7 +267,7 @@ func main() {
 
 		api.DELETE("/projects/:name", func(c *gin.Context) {
 			name := c.Param("name")
-			projectDir := filepath.Join("/opt/foxdocker/apps", name)
+			projectDir := filepath.Join(system.ProjectsRoot, name)
 			cmd := exec.Command("docker", "compose", "down", "-v")
 			cmd.Dir = projectDir
 			cmd.Run() // Best effort down

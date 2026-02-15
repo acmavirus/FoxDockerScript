@@ -16,6 +16,7 @@ type FileItem struct {
 }
 
 const ProjectsRoot = "/opt/foxdocker/apps"
+const BackupRoot = "/opt/foxdocker/backups"
 
 func ListFiles(path string) ([]FileItem, error) {
 	fullPath := filepath.Join(ProjectsRoot, path)

@@ -2,7 +2,6 @@
 package database
 
 import (
-	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"

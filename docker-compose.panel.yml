@@ -25,7 +25,8 @@ services:
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
       - "/opt/foxdocker/data:/app/data"
-      - "/opt/foxdocker/projects:/projects"
+      - "/opt/foxdocker/apps:/opt/foxdocker/apps"
+      - "/opt/foxdocker/backups:/opt/foxdocker/backups"
     environment:
       - JWT_SECRET=change_me_in_production
     labels:

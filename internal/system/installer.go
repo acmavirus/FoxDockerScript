@@ -21,7 +21,7 @@ type App struct {
 
 // InstallApp handles the installation of an app using Docker Compose
 func InstallApp(app App, envVars map[string]string) error {
-	appDir := filepath.Join("/opt/foxdocker/apps", app.ID)
+	appDir := filepath.Join(ProjectsRoot, app.ID)
 	if err := os.MkdirAll(appDir, 0755); err != nil {
 		return fmt.Errorf("failed to create app directory: %v", err)
 	}
